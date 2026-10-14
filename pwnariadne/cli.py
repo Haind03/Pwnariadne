@@ -116,6 +116,17 @@ def build_parser() -> argparse.ArgumentParser:
         help="check which sink addresses are reachable from entry (needs angr)",
     )
     p.add_argument(
+        "--cyclic",
+        action="store_true",
+        help="print a De Bruijn pattern to verify the computed overflow offset",
+    )
+    p.add_argument(
+        "--cyclic-find",
+        metavar="VALUE",
+        help="look up the offset of a value (0x.. hex, int, or 4 ascii bytes) "
+        "in the cyclic pattern, then exit",
+    )
+    p.add_argument(
         "--toolbox",
         action="store_true",
         help="print which external tools were detected, then continue",
@@ -144,6 +155,48 @@ def build_parser() -> argparse.ArgumentParser:
     return p
 
 
+def _do_cyclic_find(value: str) -> int:
+    from pwnariadne.core.cyclic import cyclic_find
+
+    v = value.strip()
+    try:
+        if v.startswith("0x"):
+            sub = int(v, 16)
+        elif v.lstrip("-").isdigit():
+            sub = int(v)
+        else:
+            sub = v.encode()
+    except ValueError:
+        print(f"error: could not parse value {value!r}", file=sys.stderr)
+        return 2
+    off = cyclic_find(sub)
+    if off < 0:
+        print("not found in the cyclic pattern (try the little-endian low 4 bytes)")
+        return 1
+    print(off)
+    return 0
+
+
+def _print_cyclic(offsets) -> None:
+    """Print a De Bruijn pattern that reaches the saved RIP, for verification."""
+
+    from pwnariadne.core.cyclic import cyclic
+
+    o = max(offsets, key=lambda x: x.offset_to_ret)
+    pat = cyclic(o.offset_to_ret).decode("latin-1")
+    print(
+        f"\n[pwnariadne] offset verification for {o.sink} "
+        f"(offset to saved RIP = {o.offset_to_ret}):",
+        file=sys.stderr,
+    )
+    print(
+        "[pwnariadne] send this padding, then your 8-byte RIP; the bytes that "
+        "land in RIP map back with --cyclic-find:",
+        file=sys.stderr,
+    )
+    print(pat)
+
+
 def _resolve_flavor(choice: str) -> DebuggerFlavor:
     if choice == "auto":
         return detect_debugger()
@@ -152,6 +205,9 @@ def _resolve_flavor(choice: str) -> DebuggerFlavor:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+
+    if args.cyclic_find is not None:
+        return _do_cyclic_find(args.cyclic_find)
 
     if not args.no_banner and args.format == "terminal":
         _print_banner()
@@ -258,6 +314,9 @@ def main(argv: list[str] | None = None) -> int:
         reachability,
         offsets,
     )
+
+    if args.cyclic and offsets:
+        _print_cyclic(offsets)
 
     if args.gdb:
         flavor = _resolve_flavor(args.debugger)

@@ -7,6 +7,12 @@ Keep a Changelog, and the project uses semantic versioning.
 
 ### Added
 
+- Overflow offset solver now handles frame-pointer-less functions (the rsp
+  frame: it tracks push/sub/add/pop stack growth and `mov reg, rsp` buffers),
+  not just rbp frames. frame_kind records which.
+- Cyclic (De Bruijn) helpers (`core/cyclic.py`) and `--cyclic` / `--cyclic-find`
+  to generate and resolve an offset-verification pattern (pwntools compatible).
+
 - Overflow offset is now canary-aware (`offset_to_canary` at rbp-8) and the
   report notes when the canary must be leaked first.
 - seccomp detection (`Binary.uses_seccomp`): when a filter is installed the

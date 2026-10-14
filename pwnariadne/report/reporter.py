@@ -203,10 +203,14 @@ def to_markdown(
                 "| Sink | Function | To saved RBP | To saved RIP |",
                 "|------|----------|--------------|--------------|"]
         for o in offsets:
+            rbp_cell = (
+                "n/a"
+                if o.offset_to_saved_rbp < 0
+                else f"{o.offset_to_saved_rbp} (`{o.offset_to_saved_rbp:#x}`)"
+            )
             out.append(
                 f"| `{o.sink}` @ `{o.call_address:#x}` | `{o.in_function}` "
-                f"| {o.offset_to_saved_rbp} (`{o.offset_to_saved_rbp:#x}`) "
-                f"| {o.offset_to_ret} (`{o.offset_to_ret:#x}`) |"
+                f"| {rbp_cell} | {o.offset_to_ret} (`{o.offset_to_ret:#x}`) [{o.frame_kind}] |"
             )
         out.append("")
         if mitigations and mitigations.canary:
@@ -346,11 +350,15 @@ def to_terminal(
         otab.add_column("-> saved RIP", style="bold green")
         otab.add_column("Conf.")
         for o in offsets:
+            rbp_cell = (
+                "n/a" if o.offset_to_saved_rbp < 0
+                else f"{o.offset_to_saved_rbp} ({o.offset_to_saved_rbp:#x})"
+            )
             otab.add_row(
                 f"{o.sink} @ {o.call_address:#x}",
                 o.in_function,
-                f"{o.offset_to_saved_rbp} ({o.offset_to_saved_rbp:#x})",
-                f"{o.offset_to_ret} ({o.offset_to_ret:#x})",
+                rbp_cell,
+                f"{o.offset_to_ret} ({o.offset_to_ret:#x}) [{o.frame_kind}]",
                 o.confidence,
             )
         console.print(otab)

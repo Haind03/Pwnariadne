@@ -114,6 +114,14 @@ payloads, ROP chains, or offsets.
 | format-string + RELRO ≠ full | GOT overwrite (`%n`) | writable GOT |
 | `malloc`/`free` present | UAF / double-free / tcache study | allocator-dependent |
 
+### Verifying the offset (cyclic)
+
+`--cyclic` prints a De Bruijn pattern of exactly the computed length to the
+saved RIP; run the target with it, then `--cyclic-find <value>` maps the bytes
+that landed in RIP back to the offset (pwntools-compatible). The solver also
+handles functions with no frame pointer (the `sub rsp, N` / `mov reg, rsp`
+layout), reported as `frame_kind = rsp`.
+
 ### seccomp, canary and the debugger
 
 When the binary installs a **seccomp** filter, Pwnariadne drops the shell
@@ -247,7 +255,7 @@ pwnariadne/
 └── cli.py         # command-line entry point
 assets/            # logo (SVG)
 examples/          # deliberately-unsafe sample for testing (not an exploit)
-tests/             # pytest suite (83 tests, 1 needs angr)
+tests/             # pytest suite (89 tests, 1 needs angr)
 .github/           # CI (pytest on Python 3.10 to 3.12 + CLI smoke test)
 ```
 
