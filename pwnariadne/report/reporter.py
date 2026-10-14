@@ -46,7 +46,10 @@ def to_endpoints(findings: list[Finding]) -> str:
     lines: list[str] = []
     for f in findings:
         where = f"{f.address:#x}" if f.address is not None else f.location
-        lines.append(f"{where}\t{f.sink.name}\t{f.bug_class}")
+        row = f"{where}\t{f.sink.name}\t{f.bug_class}"
+        if f.taint:
+            row += f"\t{f.taint}"
+        lines.append(row)
     return "\n".join(lines)
 
 
@@ -106,6 +109,7 @@ def to_json(
                 "source_file": f.source_file,
                 "line": f.line,
                 "snippet": f.snippet,
+                "taint": f.taint,
                 "why": f.sink.why,
                 "watch": f.sink.watch,
             }
@@ -146,12 +150,12 @@ def to_markdown(
     if not findings:
         out.append("_No sink calls found._")
     else:
-        out += ["| # | Severity | Sink | Bug class | Location | Watch |",
-                "|---|----------|------|-----------|----------|-------|"]
+        out += ["| # | Severity | Sink | Bug class | Taint | Location | Watch |",
+                "|---|----------|------|-----------|-------|----------|-------|"]
         for i, f in enumerate(findings, start=1):
             out.append(
                 f"| {i} | {f.severity} | `{f.sink.name}` | {f.bug_class} "
-                f"| `{f.location}` | {f.sink.watch} |"
+                f"| {f.taint or '-'} | `{f.location}` | {f.sink.watch} |"
             )
 
     if techniques:
@@ -221,14 +225,25 @@ def to_terminal(
     if not findings:
         console.print("[green]No sink calls found.[/]")
     else:
+        _taint_style = {"tainted": "bold red", "local": "yellow", "constant": "dim"}
         table = Table(title="Suspicious call sites (verify each: expect false positives)")
         table.add_column("#", justify="right")
         table.add_column("Sev", justify="right")
         table.add_column("Sink", style="bold red")
         table.add_column("Bug class")
+        table.add_column("Taint")
         table.add_column("Location")
         for i, f in enumerate(findings, start=1):
-            table.add_row(str(i), str(f.severity), f.sink.name, f.bug_class, f.location)
+            taint = f.taint or "-"
+            tstyle = _taint_style.get(f.taint or "", "")
+            table.add_row(
+                str(i),
+                str(f.severity),
+                f.sink.name,
+                f.bug_class,
+                f"[{tstyle}]{taint}[/]" if tstyle else taint,
+                f.location,
+            )
         console.print(table)
 
     if techniques:

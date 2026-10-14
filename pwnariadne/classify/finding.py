@@ -19,6 +19,10 @@ class Finding:
     source_file: str | None = None
     line: int | None = None
     snippet: str | None = None
+    # Intraprocedural taint note for the sink's key argument, when known:
+    # "tainted" (from an external source), "local" (a local buffer/var),
+    # "constant" (a literal), or None when the backend cannot tell.
+    taint: str | None = None
 
     @property
     def bug_class(self) -> str:

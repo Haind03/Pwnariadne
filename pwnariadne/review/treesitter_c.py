@@ -18,6 +18,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from pwnariadne.classify.finding import Finding
+from pwnariadne.review import taint_c
 from pwnariadne.review.sinks import lookup
 
 # Index of the format argument for the format string family, by function name.
@@ -133,11 +134,14 @@ def review_file(path: Path) -> list[Finding]:
     tree = parser.parse(src)
     findings: list[Finding] = []
 
+    # Cache each enclosing function's tainted identifier set by node id.
+    taint_cache: dict[int, set[str]] = {}
+
     stack = [tree.root_node]
     while stack:
         node = stack.pop()
         if node.type == "call_expression":
-            finding = _finding_for_call(node, src, path)
+            finding = _finding_for_call(node, src, path, taint_cache)
             if finding is not None:
                 findings.append(finding)
         stack.extend(node.children)
@@ -145,7 +149,18 @@ def review_file(path: Path) -> list[Finding]:
     return findings
 
 
-def _finding_for_call(call, src: bytes, path: Path) -> Finding | None:
+def _enclosing_function_node(node):
+    cur = node.parent
+    while cur is not None:
+        if cur.type == "function_definition":
+            return cur
+        cur = cur.parent
+    return None
+
+
+def _finding_for_call(
+    call, src: bytes, path: Path, taint_cache: dict[int, set[str]]
+) -> Finding | None:
     name = _callee_name(call, src)
     if name is None:
         return None
@@ -156,6 +171,16 @@ def _finding_for_call(call, src: bytes, path: Path) -> Finding | None:
     # Triage format string calls: a constant format argument is not a bug.
     if sink.bug_class == "format-string" and _format_arg_is_constant(name, _call_arguments(call)):
         return None
+
+    # Taint note from the enclosing function, computed once and cached.
+    taint: str | None = None
+    func = _enclosing_function_node(call)
+    if func is not None:
+        tainted = taint_cache.get(id(func))
+        if tainted is None:
+            tainted = taint_c.compute_tainted(func, src)
+            taint_cache[id(func)] = tainted
+        taint = taint_c.label_call(call, src, name, tainted)
 
     line = call.start_point[0] + 1
     snippet = _text(call, src).replace("\n", " ").strip()
@@ -168,6 +193,7 @@ def _finding_for_call(call, src: bytes, path: Path) -> Finding | None:
         source_file=str(path),
         line=line,
         snippet=snippet,
+        taint=taint,
     )
 
 

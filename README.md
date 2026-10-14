@@ -196,7 +196,7 @@ pwnariadne/
 └── cli.py         # command-line entry point
 assets/            # logo (SVG)
 examples/          # deliberately-unsafe sample for testing (not an exploit)
-tests/             # pytest suite (42 tests)
+tests/             # pytest suite (48 tests)
 .github/           # CI (pytest on Python 3.10 to 3.12 + CLI smoke test)
 ```
 
@@ -217,7 +217,7 @@ tests/             # pytest suite (42 tests)
 - [x] `tree-sitter` backend for accurate source analysis
 - [ ] Indirect-call and additional-architecture support (capstone details)
 - [ ] Optional `angr` reachability hints for which inputs reach a sink
-- [ ] Taint note: whether a sink argument is constant or externally influenced
+- [x] Taint note: whether a sink argument is constant or externally influenced
 
 ## Contributing & license
 

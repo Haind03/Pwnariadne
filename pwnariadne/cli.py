@@ -184,7 +184,11 @@ def main(argv: list[str] | None = None) -> int:
                 file=sys.stderr,
             )
 
-    findings.sort(key=lambda f: f.severity, reverse=True)
+    _taint_rank = {"tainted": 2, "local": 1, "constant": 0}
+    findings.sort(
+        key=lambda f: (f.severity, _taint_rank.get(f.taint or "", 0)),
+        reverse=True,
+    )
 
     techniques = (
         []
