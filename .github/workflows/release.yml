@@ -1,0 +1,47 @@
+name: Release
+
+# Push a tag like v0.1.0 and GitHub Actions creates the matching release.
+# Runs on GitHub's own runner, so it is not affected by any local egress proxy.
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install and test
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+          sudo apt-get update && sudo apt-get install -y gcc make
+          make -C examples
+          pytest -q
+
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          # Skip if a release for this tag already exists (e.g. made in the UI).
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists; nothing to do."
+            exit 0
+          fi
+          notes="RELEASE_NOTES_${TAG}.md"
+          if [ -f "$notes" ]; then
+            gh release create "$TAG" --title "Pwnariadne $TAG" --notes-file "$notes"
+          else
+            gh release create "$TAG" --title "Pwnariadne $TAG" --generate-notes
+          fi
