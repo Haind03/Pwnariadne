@@ -101,21 +101,71 @@ def generate(
     findings: list[Finding],
     target: str | None = None,
     flavor: DebuggerFlavor = DebuggerFlavor.PWNDBG,
+    offsets=None,
+    onegadget=None,
 ) -> str:
-    """Return the full text of a debugger script for the given findings."""
+    """Return the full text of a debugger script for the given findings.
+
+    ``offsets`` (OverflowOffset list) annotates the matching breakpoints with the
+    computed padding to the saved RIP and a live ``$rbp`` dump. ``onegadget``
+    (OneGadgetResult) adds a ``pa_onegadget`` helper that checks each one-gadget's
+    constraints at the current stop.
+    """
+
+    offset_by_addr = {o.call_address: o for o in (offsets or [])}
 
     lines: list[str] = [_header(flavor)]
     if target:
         lines.append(f"file {target}\n")
+    if onegadget is not None and getattr(onegadget, "gadgets", None):
+        lines.append(_onegadget_helper(onegadget))
     lines.append("set $pa_count = 0\n")
 
     for idx, finding in enumerate(findings, start=1):
-        block = _breakpoint_block(idx, finding, flavor)
+        block = _breakpoint_block(idx, finding, flavor, offset_by_addr.get(finding.address))
         if block:
             lines.append(block)
 
     lines.append(_FOOTER)
     return "\n".join(lines)
+
+
+def _constraint_to_gdb(c: str) -> str:
+    """Translate a one_gadget constraint into a GDB command that shows its value.
+
+    e.g. "rsp & 0xf == 0"  -> p/x $rsp & 0xf   (want 0)
+         "[rsp+0x40] == NULL" -> x/gx $rsp+0x40   (want 0)
+         "rcx == NULL"      -> p/x $rcx         (want 0)
+    """
+
+    import re as _re
+
+    expr = c.strip()
+    mem = _re.match(r"^\[([^\]]+)\]\s*==\s*(NULL|0x0|0)\b", expr)
+    if mem:
+        addr = _re.sub(r"\b([re][a-z0-9]+)\b", r"$\1", mem.group(1))
+        return f'  printf "  [{mem.group(1)}] (want 0): "\n  x/gx {addr}'
+    left = expr.split("==")[0].strip()
+    gdb_expr = _re.sub(r"\b([re][a-z0-9]+)\b", r"$\1", left)
+    return f'  printf "  {expr}: "\n  p/x {gdb_expr}'
+
+
+def _onegadget_helper(onegadget) -> str:
+    """A GDB command that prints each one-gadget's constraint values."""
+
+    blocks = [
+        "# one_gadget constraint checker. At the hijack point run: pa_onegadget",
+        f"# libc: {onegadget.libc}",
+        "define pa_onegadget",
+    ]
+    for g in onegadget.gadgets:
+        blocks.append(f'  printf "\\n== one_gadget {g.offset:#x}  {g.call} ==\\n"')
+        if not g.constraints:
+            blocks.append('  printf "  (no constraints)\\n"')
+        for c in g.constraints:
+            blocks.append(_constraint_to_gdb(c))
+    blocks.append("end\n")
+    return "\n".join(blocks)
 
 
 def _dump_commands(bug_class: str, flavor: DebuggerFlavor) -> list[str]:
@@ -125,7 +175,7 @@ def _dump_commands(bug_class: str, flavor: DebuggerFlavor) -> list[str]:
     return commands
 
 
-def _breakpoint_block(idx: int, f: Finding, flavor: DebuggerFlavor) -> str:
+def _breakpoint_block(idx: int, f: Finding, flavor: DebuggerFlavor, offset=None) -> str:
     where = _break_location(f)
     if where is None:
         return ""
@@ -135,6 +185,15 @@ def _breakpoint_block(idx: int, f: Finding, flavor: DebuggerFlavor) -> str:
     dump = "\n".join(
         f'  python pa_safe("{cmd}")' for cmd in _dump_commands(f.bug_class, flavor)
     )
+    off_lines = ""
+    if offset is not None:
+        off_lines = (
+            f'  printf "offset buf -> saved RIP = {offset.offset_to_ret} '
+            f'({offset.offset_to_ret:#x}); canary slot at buf+{offset.offset_to_canary} '
+            f'(rbp-8)\\n"\n'
+            f'  printf "saved rbp/ret (rbp, rbp+8):\\n"\n'
+            f"  x/2gx $rbp\n"
+        )
     return (
         f"# {label}\n"
         f"break {where}\n"
@@ -142,6 +201,7 @@ def _breakpoint_block(idx: int, f: Finding, flavor: DebuggerFlavor) -> str:
         f"commands\n"
         f'  printf "\\n==== [pwnariadne] hit {f.sink.name} ({f.bug_class}) ====\\n"\n'
         f'  printf "watch: {watch}\\n"\n'
+        f"{off_lines}"
         f"{dump}\n"
         f"  continue\n"
         f"end\n"

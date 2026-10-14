@@ -114,6 +114,16 @@ payloads, ROP chains, or offsets.
 | format-string + RELRO ≠ full | GOT overwrite (`%n`) | writable GOT |
 | `malloc`/`free` present | UAF / double-free / tcache study | allocator-dependent |
 
+### seccomp, canary and the debugger
+
+When the binary installs a **seccomp** filter, Pwnariadne drops the shell
+techniques and recommends an **ORW** (open-read-write) chain instead. When a
+**stack canary** is on, the offset report and the GDB script both note the
+8 bytes at `rbp-8` you must leak first. The generated GDB script annotates each
+overflow breakpoint with the computed offset to the saved RIP (and a live
+`x/2gx $rbp`), and with `--libc` it adds a `pa_onegadget` command that checks
+each one-gadget's constraints at the hijack point.
+
 ### ROP and heap detail
 
 With `--gadgets`, the ROP analysis gets concrete: it checks the curated gadget
@@ -237,7 +247,7 @@ pwnariadne/
 └── cli.py         # command-line entry point
 assets/            # logo (SVG)
 examples/          # deliberately-unsafe sample for testing (not an exploit)
-tests/             # pytest suite (76 tests, 1 needs angr)
+tests/             # pytest suite (83 tests, 1 needs angr)
 .github/           # CI (pytest on Python 3.10 to 3.12 + CLI smoke test)
 ```
 

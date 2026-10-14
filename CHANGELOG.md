@@ -7,6 +7,14 @@ Keep a Changelog, and the project uses semantic versioning.
 
 ### Added
 
+- Overflow offset is now canary-aware (`offset_to_canary` at rbp-8) and the
+  report notes when the canary must be leaked first.
+- seccomp detection (`Binary.uses_seccomp`): when a filter is installed the
+  technique map drops ret2system and recommends an ORW (open-read-write) chain.
+- Generated GDB script annotates each stack-overflow breakpoint with the
+  computed offset to saved RIP and a live `x/2gx $rbp`, and emits a
+  `pa_onegadget` command that checks each one-gadget's constraints at the stop.
+
 - Overflow offset solver (`core/offsets.py`): for each stack-writing sink it
   reads the enclosing function's instructions and computes the byte distance
   from the destination buffer to the saved RBP and saved RIP, and shows the

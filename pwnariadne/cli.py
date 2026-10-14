@@ -181,6 +181,7 @@ def main(argv: list[str] | None = None) -> int:
                     strings=binary.interesting_strings(),
                     funcs=set(binary.defined_functions().values()),
                     is_static=len(imports) == 0,
+                    seccomp=binary.uses_seccomp(),
                 )
                 from pwnariadne.core.offsets import solve_overflow_offsets
 
@@ -260,7 +261,13 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.gdb:
         flavor = _resolve_flavor(args.debugger)
-        script = generator.generate(findings, target=args.binary, flavor=flavor)
+        script = generator.generate(
+            findings,
+            target=args.binary,
+            flavor=flavor,
+            offsets=offsets,
+            onegadget=onegadget,
+        )
         with open(args.gdb, "w") as fh:
             fh.write(script)
         print(

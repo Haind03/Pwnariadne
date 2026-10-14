@@ -45,10 +45,26 @@ def analyze_rop(
         )
     )
 
+    # --- seccomp: execve/system likely blocked, pivot to ORW --------------
+    if signals.seccomp:
+        hints.append(
+            TechniqueHint(
+                name="ORW chain (seccomp present)",
+                relevance="The binary installs a seccomp filter, so execve/system are "
+                "probably blocked. Read the flag directly with an open -> read -> write "
+                "(or sendfile) syscall chain instead of popping a shell.",
+                gate="dump the filter (seccomp-tools) to confirm which syscalls remain",
+                confidence="high",
+                present=["a seccomp filter is installed"],
+                missing=["the allowed-syscall set", "gadgets to set rdi/rsi/rdx for open/read/write"],
+                references=["https://ir0nstone.gitbook.io/notes/types/stack/syscalls"],
+            )
+        )
+
     # --- ret2system (concrete, pieces checked) ----------------------------
     has_system = "system" in signals.imports
     has_sh = any("sh" in s for s in signals.strings)
-    if has_system or has_sh:
+    if not signals.seccomp and (has_system or has_sh):
         present = []
         missing = []
         present.append("system() imported") if has_system else missing.append("a system()/execve call target")

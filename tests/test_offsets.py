@@ -61,3 +61,13 @@ def test_asm_context_is_captured():
     g = offs["gets"]
     assert any("lea" in line and "rbp" in line for line in g.asm)
     assert any("call" in line for line in g.asm)
+
+
+def test_offset_to_canary_is_eight_below_saved_rbp():
+    demo = _ensure_demo()
+    if demo is None:
+        pytest.skip("vuln_demo not built")
+    offs = _by_sink(demo)
+    g = offs["gets"]
+    # canary lives at rbp-8, buffer at rbp-0x40: distance buf->canary = 0x40-8.
+    assert g.offset_to_canary == g.offset_to_saved_rbp - 8

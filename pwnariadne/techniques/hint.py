@@ -14,6 +14,7 @@ class Signals:
     strings: list[str] = field(default_factory=list)
     funcs: set[str] = field(default_factory=set)  # defined function names
     is_static: bool = False  # statically linked (no dynamic imports)
+    seccomp: bool = False  # binary installs a seccomp filter (execve likely blocked)
 
 
 @dataclass

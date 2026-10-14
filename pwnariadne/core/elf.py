@@ -217,6 +217,35 @@ class Binary:
                 hits.append(name)
         return sorted(set(hits))
 
+    def uses_seccomp(self) -> bool:
+        """Heuristic: does the binary install a seccomp syscall filter?
+
+        Looks for the libseccomp API, a raw ``prctl``/``seccomp`` syscall path,
+        or tell-tale strings. When true, execve is often blocked and an
+        open-read-write (ORW) chain is the way out.
+        """
+
+        imports = self.imported_functions()
+        if imports & {
+            "seccomp_init",
+            "seccomp_load",
+            "seccomp_rule_add",
+            "prctl",
+            "seccomp",
+        }:
+            return True
+        names = {n.lower() for n in self.defined_functions().values()}
+        if any("seccomp" in n or "sandbox" in n for n in names):
+            return True
+        for sec_name in (".rodata", ".data"):
+            sec = self.elf.get_section_by_name(sec_name)
+            if sec is None:
+                continue
+            for token in _ascii_strings(sec.data()):
+                if "seccomp" in token.lower():
+                    return True
+        return False
+
     def interesting_strings(self) -> list[str]:
         """Notable literals (e.g. "/bin/sh", "%n") in the data sections."""
 

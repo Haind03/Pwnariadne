@@ -79,6 +79,7 @@ def to_json(
                 "offset_to_saved_rbp": o.offset_to_saved_rbp,
                 "offset_to_ret": o.offset_to_ret,
                 "offset_to_ret_hex": hex(o.offset_to_ret),
+                "offset_to_canary": o.offset_to_canary,
                 "confidence": o.confidence,
                 "asm": o.asm,
             }
@@ -208,6 +209,13 @@ def to_markdown(
                 f"| {o.offset_to_ret} (`{o.offset_to_ret:#x}`) |"
             )
         out.append("")
+        if mitigations and mitigations.canary:
+            out.append(
+                "> Stack canary is enabled: the 8 bytes at `rbp-8` "
+                f"(buffer + {offsets[0].offset_to_canary}) must be leaked and kept "
+                "intact before the overflow reaches the saved RIP."
+            )
+            out.append("")
         for o in offsets:
             out.append(f"<details><summary>{o.sink} @ {o.call_address:#x} assembly</summary>")
             out.append("")
@@ -346,6 +354,11 @@ def to_terminal(
                 o.confidence,
             )
         console.print(otab)
+        if mitigations and mitigations.canary:
+            console.print(
+                "[yellow]canary enabled:[/] leak and keep the 8 bytes at rbp-8 "
+                f"(buf+{offsets[0].offset_to_canary}) before overwriting RIP"
+            )
 
     if not findings:
         console.print("[green]No sink calls found.[/]")

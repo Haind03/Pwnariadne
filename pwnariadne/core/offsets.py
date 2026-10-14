@@ -43,6 +43,9 @@ class OverflowOffset:
     buf_disp: int  # distance from the buffer to saved rbp (bytes)
     offset_to_saved_rbp: int
     offset_to_ret: int
+    # Distance to the stack canary slot (rbp-8) when one is in use; the overflow
+    # must preserve or leak this value before it reaches the saved RIP.
+    offset_to_canary: int
     confidence: str  # "high" | "medium"
     asm: list[str] = field(default_factory=list)
 
@@ -109,6 +112,7 @@ def solve_overflow_offsets(binary) -> list[OverflowOffset]:
                     buf_disp=x,
                     offset_to_saved_rbp=x,
                     offset_to_ret=x + 8,
+                    offset_to_canary=x - 8,  # canary sits at rbp-8
                     confidence="high" if dest in reg_disp else "medium",
                     asm=[f"{i.address:#x}: {i.mnemonic} {i.op_str}".rstrip() for i in recent],
                 )
