@@ -1,0 +1,42 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pwnariadne"
+version = "0.1.0"
+description = "Trigger-guided review and observe-only debugging companion for Linux binaries (CTF and authorised testing)."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [
+    { name = "HaiND from the Post and Telecommunication Institute of Technology" },
+]
+keywords = ["pwn", "ctf", "binary-analysis", "gdb", "security", "elf"]
+classifiers = [
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Topic :: Security",
+]
+dependencies = [
+    "pyelftools>=0.30",
+    "capstone>=5.0",
+    "rich>=13.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[project.urls]
+Homepage = "https://github.com/haind03/pwnable"
+
+[project.scripts]
+pwnariadne = "pwnariadne.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["pwnariadne*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
