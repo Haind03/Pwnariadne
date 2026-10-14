@@ -140,6 +140,9 @@ pwnariadne ./target --checksec --libc ./libc.so.6 --gadgets
 # List indirect dispatch points (function pointer / vtable / GOT calls):
 pwnariadne ./target --indirect
 
+# Check which sink sites are reachable from entry (needs angr):
+pwnariadne ./target --reachability
+
 # Machine-readable output for your pipeline / write-up:
 pwnariadne ./target --gadgets --format json   --output report.json
 pwnariadne ./target --gadgets --format markdown --output report.md
@@ -153,6 +156,7 @@ pwnariadne --source src/ --source-backend auto --format markdown --output report
 ```bash
 pip install -e ".[source]"         # tree-sitter accurate C review
 pip install -e ".[integrations]"   # ROPgadget + pwntools
+pip install -e ".[reachability]"   # angr (heavy)
 # pwndbg / GEF / one_gadget: install per their own docs; auto-detected at runtime
 ```
 
@@ -193,13 +197,13 @@ pwnariadne/
 ├── review/        # sink catalogue + binary scan + tree-sitter/regex source scan
 ├── classify/      # map call sites to ranked, classified findings
 ├── techniques/    # advisory technique inference (ret2win/ROP/fmt/GOT/heap)
-├── integrations/  # detect + drive pwndbg/GEF/ROPgadget/ropper/one_gadget/pwntools
+├── integrations/  # detect + drive pwndbg/GEF/ROPgadget/ropper/one_gadget/pwntools/angr
 ├── gdbgen/        # observe-only debugger-script generator (pwndbg/GEF/gdb flavors)
 ├── report/        # terminal / endpoints / Markdown / JSON renderers
 └── cli.py         # command-line entry point
 assets/            # logo (SVG)
 examples/          # deliberately-unsafe sample for testing (not an exploit)
-tests/             # pytest suite (51 tests)
+tests/             # pytest suite (54 tests, 1 needs angr)
 .github/           # CI (pytest on Python 3.10 to 3.12 + CLI smoke test)
 ```
 
@@ -219,7 +223,7 @@ tests/             # pytest suite (51 tests)
 - [x] `one_gadget` + pwntools `ELF`/`checksec` wiring into the report
 - [x] `tree-sitter` backend for accurate source analysis
 - [x] Indirect-call detection; arch-aware disassembly (x86/x64 full, ARM/AArch64/MIPS indirect)
-- [ ] Optional `angr` reachability hints for which inputs reach a sink
+- [x] Optional `angr` static reachability (is a sink reachable from entry)
 - [x] Taint note: whether a sink argument is constant or externally influenced
 
 ## Contributing & license

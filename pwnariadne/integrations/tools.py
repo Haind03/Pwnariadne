@@ -163,6 +163,17 @@ def detect_toolbox() -> Toolbox:
         )
     )
 
+    # Reachability engine.
+    tools.append(
+        Tool(
+            "angr",
+            "library",
+            _has_module("angr"),
+            None,
+            "static reachability (CFG) from entry",
+        )
+    )
+
     # pwntools and checksec.
     tools.append(
         Tool("pwntools", "library", _has_module("pwn"), None, "ELF/checksec/ROP helpers")

@@ -32,6 +32,8 @@ dev = ["pytest>=8.0", "tree-sitter>=0.21", "tree-sitter-c>=0.21"]
 source = ["tree-sitter>=0.21", "tree-sitter-c>=0.21"]
 # Optional external tooling Pwnariadne will orchestrate when present.
 integrations = ["ROPgadget>=7.0", "pwntools>=4.11"]
+# Static reachability engine (heavy; install only if you want the feature).
+reachability = ["angr>=9.2"]
 
 [project.urls]
 Homepage = "https://github.com/haind03/pwnable"

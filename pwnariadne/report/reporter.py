@@ -15,6 +15,7 @@ from rich.table import Table
 from pwnariadne import SIGNATURE, __version__
 from pwnariadne.classify.finding import Finding
 from pwnariadne.core.elf import IndirectCall, Mitigations
+from pwnariadne.integrations.angr_reach import ReachResult
 from pwnariadne.integrations.gadgets import GadgetResult
 from pwnariadne.integrations.libc import ChecksecResult, OneGadgetResult
 from pwnariadne.integrations.tools import Toolbox
@@ -61,6 +62,7 @@ def to_json(
     onegadget: OneGadgetResult | None = None,
     checksec: ChecksecResult | None = None,
     indirect: list[IndirectCall] | None = None,
+    reachability: ReachResult | None = None,
 ) -> str:
     payload = {
         "tool": "pwnariadne",
@@ -76,6 +78,15 @@ def to_json(
             }
             for ic in (indirect or [])
         ],
+        "reachability": (
+            {
+                "available": reachability.available,
+                "note": reachability.note,
+                "reachable": {hex(a): v for a, v in reachability.reachable.items()},
+            }
+            if reachability
+            else None
+        ),
         "checksec_pwntools": (
             checksec.data if checksec and checksec.available else None
         ),
@@ -137,6 +148,7 @@ def to_markdown(
     onegadget: OneGadgetResult | None = None,
     checksec: ChecksecResult | None = None,
     indirect: list[IndirectCall] | None = None,
+    reachability: ReachResult | None = None,
 ) -> str:
     out: list[str] = [
         "# Pwnariadne report",
@@ -208,6 +220,18 @@ def to_markdown(
             out.append(f"| `{ic.address:#x}` | `{ic.in_function}` | `{ic.mnemonic} {ic.operand}` |")
         out.append("")
 
+    if reachability is not None:
+        out += ["", "## Static reachability from entry (angr)", ""]
+        if not reachability.available:
+            out.append(f"_Not available. {reachability.note}_")
+        elif not reachability.reachable:
+            out.append(f"_{reachability.note or 'no addresses checked'}_")
+        else:
+            out += ["| Address | Reachable from entry |", "|---------|----------------------|"]
+            for addr, ok in reachability.reachable.items():
+                out.append(f"| `{addr:#x}` | {'yes' if ok else 'no'} |")
+        out.append("")
+
     if onegadget is not None:
         out += ["", "## libc one_gadget (read only reconnaissance)", ""]
         if onegadget.offsets:
@@ -231,6 +255,7 @@ def to_terminal(
     onegadget: OneGadgetResult | None = None,
     checksec: ChecksecResult | None = None,
     indirect: list[IndirectCall] | None = None,
+    reachability: ReachResult | None = None,
 ) -> None:
     console = console or Console()
     console.print(f"[bold cyan]Pwnariadne {__version__}[/]: {SIGNATURE}")
@@ -301,6 +326,20 @@ def to_terminal(
         for ic in indirect:
             itab.add_row(f"{ic.address:#x}", ic.in_function, f"{ic.mnemonic} {ic.operand}")
         console.print(itab)
+
+    if reachability is not None:
+        if not reachability.available:
+            console.print(f"[dim]reachability (angr): {reachability.note}[/]")
+        elif reachability.reachable:
+            rtab = Table(title="Static reachability from entry (angr)")
+            rtab.add_column("Address", style="bold")
+            rtab.add_column("Reachable")
+            for addr, ok in reachability.reachable.items():
+                mark = "[green]yes[/]" if ok else "[red]no[/]"
+                rtab.add_row(f"{addr:#x}", mark)
+            console.print(rtab)
+        elif reachability.note:
+            console.print(f"[dim]reachability (angr): {reachability.note}[/]")
 
     if onegadget is not None:
         if onegadget.offsets:

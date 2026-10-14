@@ -111,6 +111,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="list indirect dispatch points (function pointer / vtable / GOT calls)",
     )
     p.add_argument(
+        "--reachability",
+        action="store_true",
+        help="check which sink addresses are reachable from entry (needs angr)",
+    )
+    p.add_argument(
         "--toolbox",
         action="store_true",
         help="print which external tools were detected, then continue",
@@ -221,8 +226,23 @@ def main(argv: list[str] | None = None) -> int:
     if args.checksec and args.binary:
         checksec = pwntools_checksec(args.binary)
 
+    reachability = None
+    if args.reachability and args.binary:
+        from pwnariadne.integrations.angr_reach import reachable_sinks
+
+        targets = [f.address for f in findings if f.address is not None]
+        reachability = reachable_sinks(args.binary, targets)
+
     _emit_report(
-        args, findings, mitigations, techniques, gadgets, onegadget, checksec, indirect
+        args,
+        findings,
+        mitigations,
+        techniques,
+        gadgets,
+        onegadget,
+        checksec,
+        indirect,
+        reachability,
     )
 
     if args.gdb:
@@ -238,17 +258,27 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _emit_report(
-    args, findings, mitigations, techniques, gadgets, onegadget, checksec, indirect
+    args,
+    findings,
+    mitigations,
+    techniques,
+    gadgets,
+    onegadget,
+    checksec,
+    indirect,
+    reachability,
 ) -> None:
     if args.format == "endpoints":
         text = reporter.to_endpoints(findings)
     elif args.format == "json":
         text = reporter.to_json(
-            findings, mitigations, techniques, gadgets, onegadget, checksec, indirect
+            findings, mitigations, techniques, gadgets, onegadget, checksec,
+            indirect, reachability,
         )
     elif args.format == "markdown":
         text = reporter.to_markdown(
-            findings, mitigations, techniques, gadgets, onegadget, checksec, indirect
+            findings, mitigations, techniques, gadgets, onegadget, checksec,
+            indirect, reachability,
         )
     else:
         if args.output:
@@ -264,6 +294,7 @@ def _emit_report(
                     onegadget,
                     checksec,
                     indirect,
+                    reachability,
                 )
             return
         reporter.to_terminal(
@@ -274,6 +305,7 @@ def _emit_report(
             onegadget=onegadget,
             checksec=checksec,
             indirect=indirect,
+            reachability=reachability,
         )
         return
 
