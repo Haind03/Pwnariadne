@@ -7,6 +7,11 @@ Keep a Changelog, and the project uses semantic versioning.
 
 ### Added
 
+- ret2win now reports the win function's concrete address when the binary is
+  not PIE (file-offset + base-leak note under PIE).
+- GDB `pa_fmt` command for format-string breakpoints: labels rsi/rdx/rcx/r8/r9
+  and the stack as %1$..%N$ so you can locate your controlled index.
+
 - Overflow offset solver now handles frame-pointer-less functions (the rsp
   frame: it tracks push/sub/add/pop stack growth and `mov reg, rsp` buffers),
   not just rbp frames. frame_kind records which.

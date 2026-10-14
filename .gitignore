@@ -18,6 +18,7 @@ examples/vuln_demo
 examples/heap_demo
 examples/fptr_demo
 examples/seccomp_demo
+examples/win_demo
 *.o
 
 # Generated analysis output

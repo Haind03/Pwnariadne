@@ -3,7 +3,7 @@
 CC ?= gcc
 CFLAGS ?= -fno-stack-protector -no-pie -O0 -g -w
 
-all: vuln_demo heap_demo fptr_demo seccomp_demo
+all: vuln_demo heap_demo fptr_demo seccomp_demo win_demo
 
 vuln_demo: vuln_demo.c
 	$(CC) $(CFLAGS) -o $@ $<
@@ -17,7 +17,10 @@ fptr_demo: fptr_demo.c
 seccomp_demo: seccomp_demo.c
 	$(CC) $(CFLAGS) -o $@ $<
 
+win_demo: win_demo.c
+	$(CC) $(CFLAGS) -o $@ $<
+
 clean:
-	rm -f vuln_demo heap_demo fptr_demo seccomp_demo
+	rm -f vuln_demo heap_demo fptr_demo seccomp_demo win_demo
 
 .PHONY: all clean

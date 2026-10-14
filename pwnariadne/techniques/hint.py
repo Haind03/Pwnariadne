@@ -10,6 +10,7 @@ class Signals:
     """Extra binary observations that steer technique inference."""
 
     win_symbols: list[str] = field(default_factory=list)
+    win_addrs: dict[str, int] = field(default_factory=dict)  # win symbol -> address
     imports: set[str] = field(default_factory=set)
     strings: list[str] = field(default_factory=list)
     funcs: set[str] = field(default_factory=set)  # defined function names

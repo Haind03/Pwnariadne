@@ -210,12 +210,17 @@ class Binary:
     def win_symbols(self) -> list[str]:
         """Defined functions whose names look like an intentional win/backdoor."""
 
-        hits: list[str] = []
-        for name in self.defined_functions().values():
+        return sorted(self.win_symbol_addrs())
+
+    def win_symbol_addrs(self) -> dict[str, int]:
+        """Win/backdoor-looking functions mapped to their virtual address."""
+
+        hits: dict[str, int] = {}
+        for addr, name in self.defined_functions().items():
             low = name.lower()
             if any(h in low for h in self._WIN_HINTS):
-                hits.append(name)
-        return sorted(set(hits))
+                hits[name] = addr
+        return hits
 
     def uses_seccomp(self) -> bool:
         """Heuristic: does the binary install a seccomp syscall filter?

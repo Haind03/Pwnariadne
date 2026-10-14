@@ -85,14 +85,22 @@ def infer_techniques(
                 )
             )
         if signals.win_symbols:
+            if signals.win_addrs and not m.pie:
+                targets = [f"{n} @ {signals.win_addrs[n]:#x}"
+                           for n in signals.win_symbols[:5] if n in signals.win_addrs]
+                gate = ("no PIE: use the address directly as the saved RIP "
+                        "(pad to offset_to_ret, then p64(address))")
+            else:
+                targets = list(signals.win_symbols[:5])
+                gate = "PIE: the address is a file offset; add the leaked text base"
             hints.append(
                 TechniqueHint(
                     name="ret2win",
-                    relevance="A win/backdoor-looking function is defined: "
-                    + ", ".join(signals.win_symbols[:5]),
-                    gate="redirect the return address to this function"
-                    + ("" if not m.pie else " (PIE: needs a base leak)"),
+                    relevance="A win/backdoor-looking function is defined.",
+                    gate=gate,
                     confidence="high",
+                    present=targets,
+                    missing=[] if (signals.win_addrs and not m.pie) else ["a text base leak"],
                 )
             )
         if "system" in signals.imports and any(

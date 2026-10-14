@@ -114,6 +114,16 @@ payloads, ROP chains, or offsets.
 | format-string + RELRO ≠ full | GOT overwrite (`%n`) | writable GOT |
 | `malloc`/`free` present | UAF / double-free / tcache study | allocator-dependent |
 
+### ret2win address and the format-string helper
+
+When a `win`/backdoor function is defined and the binary is not PIE, the
+ret2win hint shows its **concrete address** (e.g. `win @ 0x401176`), so with the
+computed offset you have the whole recipe: pad to `offset_to_ret`, then
+`p64(0x401176)`. Under PIE it says the address is a file offset needing a base
+leak. For format-string sinks the generated GDB script adds a `pa_fmt` command
+that labels each value printf would read as `%1$`..`%N$`, so you see which index
+reaches your input.
+
 ### Verifying the offset (cyclic)
 
 `--cyclic` prints a De Bruijn pattern of exactly the computed length to the
@@ -255,7 +265,7 @@ pwnariadne/
 └── cli.py         # command-line entry point
 assets/            # logo (SVG)
 examples/          # deliberately-unsafe sample for testing (not an exploit)
-tests/             # pytest suite (89 tests, 1 needs angr)
+tests/             # pytest suite (93 tests, 1 needs angr)
 .github/           # CI (pytest on Python 3.10 to 3.12 + CLI smoke test)
 ```
 

@@ -233,6 +233,7 @@ def main(argv: list[str] | None = None) -> int:
                 imports = binary.imported_functions()
                 signals = Signals(
                     win_symbols=binary.win_symbols(),
+                    win_addrs=binary.win_symbol_addrs(),
                     imports=imports,
                     strings=binary.interesting_strings(),
                     funcs=set(binary.defined_functions().values()),

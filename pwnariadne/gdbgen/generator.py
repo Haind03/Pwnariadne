@@ -40,9 +40,9 @@ _EXTRA: dict[str, dict[DebuggerFlavor, list[str]]] = {
         DebuggerFlavor.GDB: ["x/40xg $sp"],
     },
     "format-string": {
-        DebuggerFlavor.PWNDBG: ["got", "telescope $sp 20"],
-        DebuggerFlavor.GEF: ["got", "telescope $sp 20"],
-        DebuggerFlavor.GDB: ["x/20xg $sp"],
+        DebuggerFlavor.PWNDBG: ["got", "pa_fmt"],
+        DebuggerFlavor.GEF: ["got", "pa_fmt"],
+        DebuggerFlavor.GDB: ["pa_fmt"],
     },
     "use-after-free / double-free": {
         DebuggerFlavor.PWNDBG: ["heap", "bins", "vis_heap_chunks"],
@@ -117,6 +117,8 @@ def generate(
     lines: list[str] = [_header(flavor)]
     if target:
         lines.append(f"file {target}\n")
+    if any(f.bug_class == "format-string" for f in findings):
+        lines.append(_fmt_helper())
     if onegadget is not None and getattr(onegadget, "gadgets", None):
         lines.append(_onegadget_helper(onegadget))
     lines.append("set $pa_count = 0\n")
@@ -148,6 +150,33 @@ def _constraint_to_gdb(c: str) -> str:
     left = expr.split("==")[0].strip()
     gdb_expr = _re.sub(r"\b([re][a-z0-9]+)\b", r"$\1", left)
     return f'  printf "  {expr}: "\n  p/x {gdb_expr}'
+
+
+def _fmt_helper(stack_slots: int = 14) -> str:
+    """A GDB command that labels each value a printf would read as %N$.
+
+    %1$..%5$ are the register varargs (rsi, rdx, rcx, r8, r9) and %6$ onward are
+    the stack qwords at the format-string call, so you can see which index
+    reaches your controlled input.
+    """
+
+    lines = [
+        "# Format-string helper. At a format-string breakpoint run: pa_fmt",
+        "define pa_fmt",
+        '  printf "%%1$ (rsi) = 0x%lx\\n", $rsi',
+        '  printf "%%2$ (rdx) = 0x%lx\\n", $rdx',
+        '  printf "%%3$ (rcx) = 0x%lx\\n", $rcx',
+        '  printf "%%4$ (r8)  = 0x%lx\\n", $r8',
+        '  printf "%%5$ (r9)  = 0x%lx\\n", $r9',
+    ]
+    for i in range(stack_slots):
+        idx = 6 + i
+        off = i * 8
+        lines.append(
+            f'  printf "%%{idx}$  = 0x%lx\\n", *(unsigned long*)($sp+{off})'
+        )
+    lines.append("end\n")
+    return "\n".join(lines)
 
 
 def _onegadget_helper(onegadget) -> str:
