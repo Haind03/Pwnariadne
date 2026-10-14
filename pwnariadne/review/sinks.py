@@ -121,6 +121,58 @@ SINKS: tuple[Sink, ...] = (
         why="Dynamic stack allocation with a large/user size can clash the stack.",
         watch="The size argument.",
     ),
+    Sink(
+        name="snprintf",
+        bug_class="format-string",
+        severity=45,
+        why="Bounded, but a user-controlled format string still leaks/writes (%n).",
+        watch="Whether the format argument is constant.",
+        aliases=("vsnprintf", "__snprintf_chk"),
+    ),
+    Sink(
+        name="syslog",
+        bug_class="format-string",
+        severity=60,
+        why="Format argument is often attacker-influenced log data.",
+        watch="Whether the format argument is a constant string.",
+    ),
+    Sink(
+        name="atoi",
+        bug_class="integer-overflow",
+        severity=35,
+        why="No error/range checking; result often feeds a size or index.",
+        watch="How the parsed value is used (allocation size, loop bound, index).",
+        aliases=("atol", "atoll", "strtol", "strtoul"),
+    ),
+    Sink(
+        name="realpath",
+        bug_class="buffer-overflow",
+        severity=50,
+        why="With a NULL/short resolved-path buffer, long paths overflow (PATH_MAX).",
+        watch="The size of the resolved-path buffer.",
+    ),
+    Sink(
+        name="getenv",
+        bug_class="tainted-source",
+        severity=30,
+        why="Returns attacker-influenced data in many contexts; a taint source.",
+        watch="Where the returned string flows (into a sink above).",
+    ),
+    Sink(
+        name="recv",
+        bug_class="buffer-overflow",
+        severity=50,
+        why="A wrong length argument writes past the destination buffer.",
+        watch="The length argument vs. the destination buffer size.",
+        aliases=("recvfrom", "fgets"),
+    ),
+    Sink(
+        name="memset",
+        bug_class="buffer-overflow",
+        severity=30,
+        why="A wrong length argument writes past the destination buffer.",
+        watch="The length argument vs. the destination buffer size.",
+    ),
 )
 
 

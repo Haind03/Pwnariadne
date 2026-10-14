@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 860 300" width="860" height="300" role="img" aria-label="Pwnariadne logo">
+  <title>Pwnariadne</title>
+  <desc>The thread through the binary labyrinth — HaiND, Post and Telecommunication Institute of Technology</desc>
+
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0d1117"/>
+      <stop offset="1" stop-color="#161b22"/>
+    </linearGradient>
+    <linearGradient id="thread" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#ff4d4d"/>
+      <stop offset="1" stop-color="#ff884d"/>
+    </linearGradient>
+    <linearGradient id="wordmark" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#e6edf3"/>
+      <stop offset="1" stop-color="#9aa7b4"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="860" height="300" rx="18" fill="url(#bg)"/>
+
+  <!-- Labyrinth mark: concentric square meander with a red thread escaping it -->
+  <g transform="translate(40,54)" fill="none" stroke-linecap="square">
+    <g stroke="#2d3748" stroke-width="7">
+      <rect x="0"  y="0"  width="192" height="192"/>
+      <rect x="26" y="26" width="140" height="140"/>
+      <rect x="52" y="52" width="88"  height="88"/>
+      <!-- openings that make it a maze, not nested boxes -->
+      <line x1="96" y1="0"  x2="96" y2="0"  stroke="url(#bg)"/>
+    </g>
+    <!-- gaps punched into the walls -->
+    <g stroke="#0d1117" stroke-width="9">
+      <line x1="96" y1="-3" x2="96" y2="10"/>
+      <line x1="163" y1="96" x2="192" y2="96"/>
+      <line x1="26" y1="96" x2="52" y2="96"/>
+      <line x1="96" y1="140" x2="96" y2="166"/>
+    </g>
+    <!-- Ariadne's thread -->
+    <path d="M96 96 L96 78 L122 78 L122 118 L70 118 L70 70 L140 70 L140 140 L45 140
+             L45 45 L178 45 L178 178 L96 178 L96 205 L96 240"
+          stroke="url(#thread)" stroke-width="5" stroke-linejoin="round"/>
+    <circle cx="96" cy="96" r="7" fill="#ff4d4d" stroke="none"/>
+    <circle cx="96" cy="240" r="5" fill="#ff884d" stroke="none"/>
+  </g>
+
+  <!-- Wordmark -->
+  <text x="268" y="120" font-family="'JetBrains Mono','Fira Mono',Consolas,monospace"
+        font-size="62" font-weight="700" fill="url(#wordmark)" letter-spacing="1">
+    Pwnariadne
+  </text>
+  <text x="270" y="158" font-family="'Inter',Segoe UI,Arial,sans-serif"
+        font-size="20" fill="#8b98a5" letter-spacing="0.5">
+    the thread through the binary labyrinth
+  </text>
+
+  <!-- feature chips -->
+  <g font-family="'JetBrains Mono',monospace" font-size="14">
+    <g transform="translate(270,186)">
+      <rect width="104" height="30" rx="15" fill="#1f2a37" stroke="#30475e"/>
+      <text x="52" y="20" text-anchor="middle" fill="#ff6b6b">review</text>
+    </g>
+    <g transform="translate(384,186)">
+      <rect width="112" height="30" rx="15" fill="#1f2a37" stroke="#30475e"/>
+      <text x="56" y="20" text-anchor="middle" fill="#ffa94d">classify</text>
+    </g>
+    <g transform="translate(506,186)">
+      <rect width="96" height="30" rx="15" fill="#1f2a37" stroke="#30475e"/>
+      <text x="48" y="20" text-anchor="middle" fill="#63e6be">gdb</text>
+    </g>
+    <g transform="translate(612,186)">
+      <rect width="112" height="30" rx="15" fill="#1f2a37" stroke="#30475e"/>
+      <text x="56" y="20" text-anchor="middle" fill="#74c0fc">report</text>
+    </g>
+  </g>
+
+  <!-- signature -->
+  <text x="270" y="256" font-family="'Inter',Segoe UI,Arial,sans-serif"
+        font-size="15" fill="#6e7781">
+    HaiND · Post and Telecommunication Institute of Technology
+  </text>
+</svg>

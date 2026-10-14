@@ -15,6 +15,7 @@ from rich.table import Table
 from pwnariadne import SIGNATURE, __version__
 from pwnariadne.classify.finding import Finding
 from pwnariadne.core.elf import Mitigations
+from pwnariadne.techniques import TechniqueHint
 
 
 def to_endpoints(findings: list[Finding]) -> str:
@@ -31,12 +32,26 @@ def to_endpoints(findings: list[Finding]) -> str:
     return "\n".join(lines)
 
 
-def to_json(findings: list[Finding], mitigations: Mitigations | None) -> str:
+def to_json(
+    findings: list[Finding],
+    mitigations: Mitigations | None,
+    techniques: list[TechniqueHint] | None = None,
+) -> str:
     payload = {
         "tool": "pwnariadne",
         "version": __version__,
         "author": SIGNATURE,
         "mitigations": mitigations.as_dict() if mitigations else None,
+        "techniques": [
+            {
+                "name": t.name,
+                "relevance": t.relevance,
+                "gate": t.gate,
+                "confidence": t.confidence,
+                "references": t.references,
+            }
+            for t in (techniques or [])
+        ],
         "findings": [
             {
                 "sink": f.sink.name,
@@ -57,7 +72,11 @@ def to_json(findings: list[Finding], mitigations: Mitigations | None) -> str:
     return json.dumps(payload, indent=2)
 
 
-def to_markdown(findings: list[Finding], mitigations: Mitigations | None) -> str:
+def to_markdown(
+    findings: list[Finding],
+    mitigations: Mitigations | None,
+    techniques: list[TechniqueHint] | None = None,
+) -> str:
     out: list[str] = [
         "# Pwnariadne report",
         "",
@@ -76,23 +95,38 @@ def to_markdown(findings: list[Finding], mitigations: Mitigations | None) -> str
             f"- PIE: `{m.pie}`",
             "",
         ]
+
     out += ["## Findings", ""]
     if not findings:
         out.append("_No sink calls found._")
-        return "\n".join(out)
+    else:
+        out += ["| # | Severity | Sink | Bug class | Location | Watch |",
+                "|---|----------|------|-----------|----------|-------|"]
+        for i, f in enumerate(findings, start=1):
+            out.append(
+                f"| {i} | {f.severity} | `{f.sink.name}` | {f.bug_class} "
+                f"| `{f.location}` | {f.sink.watch} |"
+            )
 
-    out += ["| # | Severity | Sink | Bug class | Location | Watch |",
-            "|---|----------|------|-----------|----------|-------|"]
-    for i, f in enumerate(findings, start=1):
-        out.append(
-            f"| {i} | {f.severity} | `{f.sink.name}` | {f.bug_class} "
-            f"| `{f.location}` | {f.sink.watch} |"
-        )
+    if techniques:
+        out += ["", "## Candidate techniques to investigate", "",
+                "> Advisory only — conditions observed, not confirmed exploits.", ""]
+        for t in techniques:
+            out.append(f"### {t.name}  _(confidence: {t.confidence})_")
+            out.append(f"- **Relevance:** {t.relevance}")
+            out.append(f"- **Gate:** {t.gate}")
+            for ref in t.references:
+                out.append(f"- Ref: {ref}")
+            out.append("")
+
     return "\n".join(out) + "\n"
 
 
 def to_terminal(
-    findings: list[Finding], mitigations: Mitigations | None, console: Console | None = None
+    findings: list[Finding],
+    mitigations: Mitigations | None,
+    console: Console | None = None,
+    techniques: list[TechniqueHint] | None = None,
 ) -> None:
     console = console or Console()
     console.print(f"[bold cyan]Pwnariadne {__version__}[/] — {SIGNATURE}")
@@ -106,14 +140,24 @@ def to_terminal(
 
     if not findings:
         console.print("[green]No sink calls found.[/]")
-        return
+    else:
+        table = Table(title="Suspicious call sites (verify each — expect false positives)")
+        table.add_column("#", justify="right")
+        table.add_column("Sev", justify="right")
+        table.add_column("Sink", style="bold red")
+        table.add_column("Bug class")
+        table.add_column("Location")
+        for i, f in enumerate(findings, start=1):
+            table.add_row(str(i), str(f.severity), f.sink.name, f.bug_class, f.location)
+        console.print(table)
 
-    table = Table(title="Suspicious call sites (verify each — expect false positives)")
-    table.add_column("#", justify="right")
-    table.add_column("Sev", justify="right")
-    table.add_column("Sink", style="bold red")
-    table.add_column("Bug class")
-    table.add_column("Location")
-    for i, f in enumerate(findings, start=1):
-        table.add_row(str(i), str(f.severity), f.sink.name, f.bug_class, f.location)
-    console.print(table)
+    if techniques:
+        _conf_style = {"high": "bold red", "medium": "yellow", "low": "dim"}
+        tech = Table(title="Candidate techniques to investigate (advisory)")
+        tech.add_column("Technique", style="bold")
+        tech.add_column("Conf.")
+        tech.add_column("Gate")
+        for t in techniques:
+            style = _conf_style.get(t.confidence, "")
+            tech.add_row(t.name, f"[{style}]{t.confidence}[/]", t.gate)
+        console.print(tech)

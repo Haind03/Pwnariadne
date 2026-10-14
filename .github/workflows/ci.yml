@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install build tools for the demo target
+        run: sudo apt-get update && sudo apt-get install -y gcc make
+
+      - name: Install package (with dev extras)
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Build the demo binary
+        run: make -C examples
+
+      - name: Run tests
+        run: pytest -q
+
+      - name: Smoke-test the CLI
+        run: |
+          python -m pwnariadne examples/vuln_demo --no-banner --format endpoints
+          python -m pwnariadne examples/vuln_demo --no-banner --gdb /tmp/out.gdb
+          test -s /tmp/out.gdb

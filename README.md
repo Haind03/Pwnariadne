@@ -1,6 +1,15 @@
-# Pwnariadne
+<p align="center">
+  <img src="assets/logo.svg" alt="Pwnariadne" width="620">
+</p>
 
-> _Follow the thread from input to crash._
+<p align="center">
+  <em>Follow the thread from input to crash.</em><br>
+  <img alt="CI" src="https://github.com/Haind03/Pwnariadne/actions/workflows/ci.yml/badge.svg">
+  <img alt="Python" src="https://img.shields.io/badge/python-3.10%2B-blue">
+  <img alt="License" src="https://img.shields.io/badge/license-MIT-green">
+</p>
+
+# Pwnariadne
 
 **Pwnariadne** is a trigger-guided review and **observe-only** debugging
 companion for Linux binaries. Like Ariadne's thread through the labyrinth, it
@@ -51,7 +60,29 @@ straight into GDB (pwndbg/GEF-aware).
 3. **gdbgen** — emit an observe-only GDB script that breaks at every finding and
    dumps registers, stack and backtrace on hit.
 4. **report** — print a terminal table or write Markdown / JSON for your
-   write-up or audit note.
+   write-up or audit note, including a **candidate-techniques** advisory.
+
+## Technique awareness (advisory)
+
+Beyond listing sinks, Pwnariadne reasons from the mitigations + findings +
+binary signals (a `/bin/sh` string, a `win`-looking symbol, imported `system`)
+to name the **classes of technique worth investigating**, and which mitigation
+gates each. This is a study map, not an exploit generator — it never emits
+payloads, ROP chains, or offsets.
+
+| Observed condition | Technique surfaced | Gate |
+|---|---|---|
+| stack overflow, `canary=False` | saved-return-address overwrite | no leak needed |
+| stack overflow, `canary=True` | canary leak → overwrite | needs info-leak first |
+| stack overflow, `nx=False` | ret2shellcode | W^X disabled |
+| stack overflow, `nx=True` | ROP / ret2libc | PIE needs a base leak |
+| `win`/backdoor symbol present | ret2win | redirect return address |
+| `system` import + shell string | ret2system territory | reach `system()` |
+| format-string sink | arbitrary read (leak) | defeats ASLR via leak |
+| format-string + RELRO ≠ full | GOT overwrite (`%n`) | writable GOT |
+| `malloc`/`free` present | UAF / double-free / tcache study | allocator-dependent |
+
+Suppress the section with `--no-techniques`.
 
 ## Install
 
@@ -72,6 +103,10 @@ pwnariadne ./target --gdb breakpoints.gdb
 
 # Also scan C source alongside the binary:
 pwnariadne ./target --source src/ --gdb breakpoints.gdb
+
+# Install as a command and run anywhere:
+pip install -e .            # or: make install
+pwnariadne ./target --gdb breakpoints.gdb
 
 # Just the trigger points, one per line (greppable / pipe-friendly):
 pwnariadne ./target --format endpoints
@@ -121,14 +156,17 @@ Mitigations: arch=x64/64 relro=partial canary=False nx=True pie=False
 
 ```
 pwnariadne/
-├── core/      # ELF loading, mitigations, PLT/call-site disassembly (capstone)
-├── review/    # sink catalogue + binary and source scanners
-├── classify/  # map call sites to ranked, classified findings
-├── gdbgen/    # observe-only GDB breakpoint-script generator
-├── report/    # terminal / Markdown / JSON renderers
-└── cli.py     # command-line entry point
-examples/      # deliberately-unsafe sample for testing (not an exploit)
-tests/         # pytest suite
+├── core/        # ELF loading, mitigations, PLT/call-site disasm, strings/symbols
+├── review/      # sink catalogue + binary and source scanners
+├── classify/    # map call sites to ranked, classified findings
+├── techniques/  # advisory technique inference (ret2win/ROP/fmt/GOT/heap …)
+├── gdbgen/      # observe-only GDB breakpoint-script generator
+├── report/      # terminal / endpoints / Markdown / JSON renderers
+└── cli.py       # command-line entry point
+assets/          # logo (SVG)
+examples/        # deliberately-unsafe sample for testing (not an exploit)
+tests/           # pytest suite (23 tests)
+.github/         # CI (pytest on Python 3.10–3.12 + CLI smoke test)
 ```
 
 ## Limitations (v0.1)

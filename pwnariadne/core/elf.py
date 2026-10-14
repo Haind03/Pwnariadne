@@ -46,6 +46,23 @@ class CallSite:
     in_function: str  # nearest preceding function symbol, or "?"
 
 
+def _ascii_strings(blob: bytes, min_len: int = 4) -> list[str]:
+    """Extract printable ASCII runs of at least ``min_len`` characters."""
+
+    out: list[str] = []
+    cur = bytearray()
+    for byte in blob:
+        if 0x20 <= byte < 0x7F:
+            cur.append(byte)
+        else:
+            if len(cur) >= min_len:
+                out.append(cur.decode("ascii", "replace"))
+            cur.clear()
+    if len(cur) >= min_len:
+        out.append(cur.decode("ascii", "replace"))
+    return out
+
+
 class Binary:
     """A loaded ELF, offering mitigation and call-site queries."""
 
@@ -129,6 +146,59 @@ class Binary:
                     if sym.name == name:
                         return True
         return False
+
+    # Symbol names that commonly mark an intentional "win"/backdoor function
+    # in CTF challenges — worth surfacing for ret2win awareness.
+    _WIN_HINTS = (
+        "win",
+        "backdoor",
+        "shell",
+        "getshell",
+        "give_shell",
+        "flag",
+        "secret",
+        "admin",
+        "magic",
+        "cat_flag",
+        "print_flag",
+    )
+
+    def imported_functions(self) -> set[str]:
+        """Names of dynamically imported functions (undefined symbols)."""
+
+        names: set[str] = set()
+        dynsym = self.elf.get_section_by_name(".dynsym")
+        if isinstance(dynsym, SymbolTableSection):
+            for sym in dynsym.iter_symbols():
+                if sym.name and sym["st_shndx"] == "SHN_UNDEF":
+                    names.add(sym.name)
+        return names
+
+    def win_symbols(self) -> list[str]:
+        """Defined functions whose names look like an intentional win/backdoor."""
+
+        hits: list[str] = []
+        for name in self.defined_functions().values():
+            low = name.lower()
+            if any(h in low for h in self._WIN_HINTS):
+                hits.append(name)
+        return sorted(set(hits))
+
+    def interesting_strings(self) -> list[str]:
+        """Notable literals (e.g. "/bin/sh", "%n") in the data sections."""
+
+        wanted = ("/bin/sh", "/bin/bash", "sh\x00", "%n", "cat ", "flag")
+        found: set[str] = set()
+        for sec_name in (".rodata", ".data", ".data.rel.ro"):
+            sec = self.elf.get_section_by_name(sec_name)
+            if sec is None:
+                continue
+            blob = sec.data()
+            for token in _ascii_strings(blob):
+                for needle in wanted:
+                    if needle.strip("\x00") and needle.strip("\x00") in token:
+                        found.add(token.strip())
+        return sorted(found)
 
     def defined_functions(self) -> dict[int, str]:
         """Map of function virtual address -> name, from the symbol tables."""
