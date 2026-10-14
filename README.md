@@ -98,6 +98,23 @@ payloads, ROP chains, or offsets.
 | format-string + RELRO ≠ full | GOT overwrite (`%n`) | writable GOT |
 | `malloc`/`free` present | UAF / double-free / tcache study | allocator-dependent |
 
+### ROP and heap detail
+
+With `--gadgets`, the ROP analysis gets concrete: it checks the curated gadget
+set and the binary's symbols to surface **ret2libc chain**, **ret2system**,
+**ret2csu**, **stack pivot**, **syscall ROP / SROP** and **ret2dlresolve**, and
+for each one lists the pieces already **present** and still **missing** (for
+example `pop rdi ; ret` present, `pop rsi ; ret` missing).
+
+When heap findings are present, the heap analysis surfaces the glibc ptmalloc
+techniques to study: **use-after-free**, **double-free / tcache poisoning**,
+**overflow into chunk metadata**, **tcache poisoning (arbitrary alloc)** and an
+**unsorted-bin libc leak**, each gated by the allocator version and the
+primitive it needs.
+
+These are study maps: Pwnariadne names the pieces and the gaps, it never
+assembles a chain or emits a payload.
+
 Suppress the section with `--no-techniques`.
 
 ## Install
@@ -203,7 +220,7 @@ pwnariadne/
 └── cli.py         # command-line entry point
 assets/            # logo (SVG)
 examples/          # deliberately-unsafe sample for testing (not an exploit)
-tests/             # pytest suite (54 tests, 1 needs angr)
+tests/             # pytest suite (69 tests, 1 needs angr)
 .github/           # CI (pytest on Python 3.10 to 3.12 + CLI smoke test)
 ```
 

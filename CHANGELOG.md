@@ -3,6 +3,19 @@
 All notable changes to Pwnariadne are documented here. The format follows
 Keep a Changelog, and the project uses semantic versioning.
 
+## [Unreleased]
+
+### Added
+
+- Deeper ROP-chain analysis (`techniques/rop.py`): ret2libc chain, ret2system,
+  ret2csu, stack pivot, syscall ROP / SROP and ret2dlresolve, each listing the
+  gadget/symbol pieces present and still missing. Uses the `--gadgets` set.
+- Deeper heap analysis (`techniques/heap.py`): UAF, double-free / tcache
+  poisoning, overflow into chunk metadata, arbitrary-alloc tcache poisoning and
+  unsorted-bin libc leak, gated by allocator version and required primitive.
+- TechniqueHint gains `present` / `missing` fields, shown in terminal, markdown
+  and json.
+
 ## [0.1.0]
 
 First public version.

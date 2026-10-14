@@ -173,10 +173,13 @@ def main(argv: list[str] | None = None) -> int:
             with Binary(args.binary) as binary:
                 mitigations = binary.mitigations()
                 findings.extend(finding_mod.from_call_sites(binary.call_sites()))
+                imports = binary.imported_functions()
                 signals = Signals(
                     win_symbols=binary.win_symbols(),
-                    imports=binary.imported_functions(),
+                    imports=imports,
                     strings=binary.interesting_strings(),
+                    funcs=set(binary.defined_functions().values()),
+                    is_static=len(imports) == 0,
                 )
                 if args.indirect:
                     indirect = binary.indirect_call_sites()
@@ -208,15 +211,20 @@ def main(argv: list[str] | None = None) -> int:
         reverse=True,
     )
 
-    techniques = (
-        []
-        if args.no_techniques
-        else infer_techniques(mitigations, findings, signals)
-    )
-
     gadgets: GadgetResult | None = None
     if args.gadgets and args.binary:
         gadgets = enumerate_gadgets(args.binary)
+
+    techniques = (
+        []
+        if args.no_techniques
+        else infer_techniques(
+            mitigations,
+            findings,
+            signals,
+            gadgets.gadgets if gadgets else None,
+        )
+    )
 
     onegadget: OneGadgetResult | None = None
     if args.libc:

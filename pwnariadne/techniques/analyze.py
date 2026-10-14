@@ -7,36 +7,20 @@ enables or blocks it. Nothing here produces an exploit: it is a study map.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-
 from pwnariadne.classify.finding import Finding
 from pwnariadne.core.elf import Mitigations
+from pwnariadne.techniques.heap import analyze_heap
+from pwnariadne.techniques.hint import Signals, TechniqueHint
+from pwnariadne.techniques.rop import analyze_rop
 
-
-@dataclass
-class Signals:
-    """Extra binary observations that steer technique inference."""
-
-    win_symbols: list[str] = field(default_factory=list)
-    imports: set[str] = field(default_factory=set)
-    strings: list[str] = field(default_factory=list)
-
-
-@dataclass
-class TechniqueHint:
-    """One technique class worth investigating, with its rationale and gate."""
-
-    name: str
-    relevance: str  # why the observed state makes this relevant
-    gate: str  # the mitigation condition that enables/blocks it
-    confidence: str  # "high" | "medium" | "low"
-    references: list[str] = field(default_factory=list)
+__all__ = ["Signals", "TechniqueHint", "infer_techniques"]
 
 
 def infer_techniques(
     mitigations: Mitigations | None,
     findings: list[Finding],
     signals: Signals | None = None,
+    gadgets: dict[str, int] | None = None,
 ) -> list[TechniqueHint]:
     """Produce an ordered list of advisory technique hints."""
 
@@ -157,17 +141,12 @@ def infer_techniques(
                 )
             )
 
-    # --- heap -------------------------------------------------------------
+    # --- ROP chain detail (NX on): concrete sub-techniques + gadgets ------
+    if has_stack_of and m is not None and m.nx:
+        hints.extend(analyze_rop(m, signals, gadgets))
+
+    # --- heap sub-techniques ---------------------------------------------
     if has_heap:
-        hints.append(
-            TechniqueHint(
-                name="heap: UAF / double-free / tcache study",
-                relevance="Heap allocation and free calls are present; investigate "
-                "use-after-free, double-free and tcache/fastbin integrity.",
-                gate="depends on allocator version and freed-chunk reuse",
-                confidence="medium",
-                references=["https://heap-exploitation.dhavalkapil.com/"],
-            )
-        )
+        hints.extend(analyze_heap(findings, signals))
 
     return hints

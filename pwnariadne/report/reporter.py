@@ -115,6 +115,8 @@ def to_json(
                 "relevance": t.relevance,
                 "gate": t.gate,
                 "confidence": t.confidence,
+                "present": t.present,
+                "missing": t.missing,
                 "references": t.references,
             }
             for t in (techniques or [])
@@ -188,6 +190,10 @@ def to_markdown(
             out.append(f"### {t.name}  _(confidence: {t.confidence})_")
             out.append(f"- **Relevance:** {t.relevance}")
             out.append(f"- **Gate:** {t.gate}")
+            if t.present:
+                out.append(f"- **Present:** {', '.join(t.present)}")
+            if t.missing:
+                out.append(f"- **Missing:** {', '.join(t.missing)}")
             for ref in t.references:
                 out.append(f"- Ref: {ref}")
             out.append("")
@@ -298,10 +304,15 @@ def to_terminal(
         tech = Table(title="Candidate techniques to investigate (advisory)")
         tech.add_column("Technique", style="bold")
         tech.add_column("Conf.")
+        tech.add_column("Have / need")
         tech.add_column("Gate")
         for t in techniques:
             style = _conf_style.get(t.confidence, "")
-            tech.add_row(t.name, f"[{style}]{t.confidence}[/]", t.gate)
+            if t.present or t.missing:
+                pieces = f"[green]{len(t.present)}[/] have / [red]{len(t.missing)}[/] need"
+            else:
+                pieces = "-"
+            tech.add_row(t.name, f"[{style}]{t.confidence}[/]", pieces, t.gate)
         console.print(tech)
 
     if gadgets is not None:
