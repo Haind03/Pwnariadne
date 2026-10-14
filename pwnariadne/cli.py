@@ -1,9 +1,10 @@
-"""Command-line interface for Pwnariadne.
+"""Command line interface for Pwnariadne.
 
     pwnariadne BINARY [--source PATH ...] [--gdb OUT.gdb]
-                      [--format terminal|markdown|json] [--output FILE]
+                      [--debugger pwndbg|gef|gdb|auto] [--gadgets]
+                      [--format terminal|endpoints|markdown|json] [--output FILE]
 
-Defensive / educational use only. Analyse binaries you are authorised to test.
+Defensive and educational use only. Analyse binaries you are authorised to test.
 """
 
 from __future__ import annotations
@@ -15,6 +16,8 @@ from pwnariadne import SIGNATURE, __version__
 from pwnariadne.classify import finding as finding_mod
 from pwnariadne.core.elf import Binary, Mitigations
 from pwnariadne.gdbgen import generator
+from pwnariadne.integrations import DebuggerFlavor, detect_debugger, detect_toolbox
+from pwnariadne.integrations.gadgets import GadgetResult, enumerate_gadgets
 from pwnariadne.report import reporter
 from pwnariadne.techniques import infer_techniques
 from pwnariadne.techniques.analyze import Signals
@@ -27,8 +30,7 @@ _LOGO = r"""
  |_|     \_/\_/ |_| |_|\__,_|_|  |_|\__,_|\__,_|_| |_|\___|
 """
 
-# A compact labyrinth-and-thread motif, in the spirit of the SVG logo.
-_THREAD = "  ╔═╦═══╗  ·──●  follow the thread from input to crash"
+_TAGLINE = "the thread through the binary labyrinth"
 
 
 def _print_banner() -> None:
@@ -39,22 +41,20 @@ def _print_banner() -> None:
 
         c = Console(stderr=True)
         c.print(f"[bold red]{_LOGO}[/]")
-        c.print(f"[dim]{_THREAD}[/]")
-        c.print(
-            f" [bold cyan]Pwnariadne {__version__}[/] "
-            f"[dim]— the thread through the binary labyrinth[/]"
-        )
+        c.print(f" [bold cyan]Pwnariadne {__version__}[/]  [dim]{_TAGLINE}[/]")
         c.print(f" [yellow]{SIGNATURE}[/]\n")
-    except Exception:  # noqa: BLE001 - banner must never break the run
+    except Exception:  # noqa: BLE001 - the banner must never break the run
         print(_LOGO, file=sys.stderr)
-        print(f" Pwnariadne {__version__} — {SIGNATURE}\n", file=sys.stderr)
+        print(f" Pwnariadne {__version__}  {_TAGLINE}", file=sys.stderr)
+        print(f" {SIGNATURE}\n", file=sys.stderr)
 
 
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="pwnariadne",
-        description="Review a Linux binary for memory-unsafe call sites and "
-        "generate an observe-only GDB script. Authorised/educational use only.",
+        description="Review a Linux binary for memory unsafe call sites, infer "
+        "candidate techniques, and generate an observe only debugger script "
+        "(pwndbg / GEF / gdb). Authorised and educational use only.",
         epilog=f"Author: {SIGNATURE}",
     )
     p.add_argument("binary", nargs="?", help="path to the ELF binary to analyse")
@@ -68,7 +68,24 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--gdb",
         metavar="OUT.gdb",
-        help="write a GDB breakpoint script to this path",
+        help="write a debugger breakpoint script to this path",
+    )
+    p.add_argument(
+        "--debugger",
+        choices=("auto", "pwndbg", "gef", "gdb"),
+        default="auto",
+        help="debugger front end the script targets (default: auto detect, "
+        "preferring pwndbg)",
+    )
+    p.add_argument(
+        "--gadgets",
+        action="store_true",
+        help="enumerate useful ROP gadgets via ROPgadget/ropper (read only)",
+    )
+    p.add_argument(
+        "--toolbox",
+        action="store_true",
+        help="print which external tools were detected, then continue",
     )
     p.add_argument(
         "--format",
@@ -94,11 +111,20 @@ def build_parser() -> argparse.ArgumentParser:
     return p
 
 
+def _resolve_flavor(choice: str) -> DebuggerFlavor:
+    if choice == "auto":
+        return detect_debugger()
+    return DebuggerFlavor(choice)
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
 
     if not args.no_banner and args.format == "terminal":
         _print_banner()
+
+    if args.toolbox:
+        reporter.print_toolbox(detect_toolbox())
 
     if not args.binary and not args.source:
         print("error: provide a BINARY and/or --source PATH", file=sys.stderr)
@@ -133,36 +159,48 @@ def main(argv: list[str] | None = None) -> int:
     findings.sort(key=lambda f: f.severity, reverse=True)
 
     techniques = (
-        [] if args.no_techniques
+        []
+        if args.no_techniques
         else infer_techniques(mitigations, findings, signals)
     )
 
-    _emit_report(args, findings, mitigations, techniques)
+    gadgets: GadgetResult | None = None
+    if args.gadgets and args.binary:
+        gadgets = enumerate_gadgets(args.binary)
+
+    _emit_report(args, findings, mitigations, techniques, gadgets)
 
     if args.gdb:
-        script = generator.generate(findings, target=args.binary)
+        flavor = _resolve_flavor(args.debugger)
+        script = generator.generate(findings, target=args.binary, flavor=flavor)
         with open(args.gdb, "w") as fh:
             fh.write(script)
-        print(f"[pwnariadne] GDB script written to {args.gdb}", file=sys.stderr)
+        print(
+            f"[pwnariadne] {flavor} script written to {args.gdb}", file=sys.stderr
+        )
 
     return 0
 
 
-def _emit_report(args, findings, mitigations, techniques) -> None:
+def _emit_report(args, findings, mitigations, techniques, gadgets) -> None:
     if args.format == "endpoints":
         text = reporter.to_endpoints(findings)
     elif args.format == "json":
-        text = reporter.to_json(findings, mitigations, techniques)
+        text = reporter.to_json(findings, mitigations, techniques, gadgets)
     elif args.format == "markdown":
-        text = reporter.to_markdown(findings, mitigations, techniques)
+        text = reporter.to_markdown(findings, mitigations, techniques, gadgets)
     else:
         if args.output:
             from rich.console import Console
 
             with open(args.output, "w") as fh:
-                reporter.to_terminal(findings, mitigations, Console(file=fh), techniques)
+                reporter.to_terminal(
+                    findings, mitigations, Console(file=fh), techniques, gadgets
+                )
             return
-        reporter.to_terminal(findings, mitigations, techniques=techniques)
+        reporter.to_terminal(
+            findings, mitigations, techniques=techniques, gadgets=gadgets
+        )
         return
 
     if args.output:

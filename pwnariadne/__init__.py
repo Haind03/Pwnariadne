@@ -1,4 +1,4 @@
-"""Pwnariadne — the thread through the binary labyrinth.
+"""Pwnariadne: the thread through the binary labyrinth.
 
 A trigger-guided review and debugging companion for Linux binaries. It walks an
 ELF (and optionally its C source), flags call sites of memory-unsafe functions,

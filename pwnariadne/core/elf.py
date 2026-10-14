@@ -148,7 +148,7 @@ class Binary:
         return False
 
     # Symbol names that commonly mark an intentional "win"/backdoor function
-    # in CTF challenges — worth surfacing for ret2win awareness.
+    # in CTF challenges: worth surfacing for ret2win awareness.
     _WIN_HINTS = (
         "win",
         "backdoor",

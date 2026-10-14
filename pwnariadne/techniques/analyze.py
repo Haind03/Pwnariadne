@@ -2,7 +2,7 @@
 
 Each :class:`TechniqueHint` says: here is a technique class, here is why the
 observed state makes it relevant, and here is the mitigation condition that
-enables or blocks it. Nothing here produces an exploit — it is a study map.
+enables or blocks it. Nothing here produces an exploit: it is a study map.
 """
 
 from __future__ import annotations
@@ -151,7 +151,7 @@ def infer_techniques(
                 TechniqueHint(
                     name="format-string write (GOT blocked)",
                     relevance="A %n write primitive exists, but Full RELRO makes the GOT "
-                    "read-only — target writable function pointers / saved state instead.",
+                    "read-only: target writable function pointers / saved state instead.",
                     gate="relro=full (GOT read-only)",
                     confidence="low",
                 )

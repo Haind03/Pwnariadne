@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "pwnariadne"
 version = "0.1.0"
-description = "Trigger-guided review and observe-only debugging companion for Linux binaries (CTF and authorised testing)."
+description = "Trigger-guided review and observe-only multi-tool debugging companion for Linux binaries (CTF and authorised testing)."
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
@@ -28,6 +28,8 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0"]
+# Optional external tooling Pwnariadne will orchestrate when present.
+integrations = ["ROPgadget>=7.0", "pwntools>=4.11"]
 
 [project.urls]
 Homepage = "https://github.com/haind03/pwnable"
