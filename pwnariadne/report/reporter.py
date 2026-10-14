@@ -17,6 +17,20 @@ from pwnariadne.classify.finding import Finding
 from pwnariadne.core.elf import Mitigations
 
 
+def to_endpoints(findings: list[Finding]) -> str:
+    """Just the trigger points, one per line — greppable and pipe-friendly.
+
+    Format: ``<location>\t<sink>\t<bug_class>``. For a binary finding the
+    location is the hex address; for a source finding it is ``file:line``.
+    """
+
+    lines: list[str] = []
+    for f in findings:
+        where = f"{f.address:#x}" if f.address is not None else f.location
+        lines.append(f"{where}\t{f.sink.name}\t{f.bug_class}")
+    return "\n".join(lines)
+
+
 def to_json(findings: list[Finding], mitigations: Mitigations | None) -> str:
     payload = {
         "tool": "pwnariadne",

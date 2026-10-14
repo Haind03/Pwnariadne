@@ -73,6 +73,13 @@ pwnariadne ./target --gdb breakpoints.gdb
 # Also scan C source alongside the binary:
 pwnariadne ./target --source src/ --gdb breakpoints.gdb
 
+# Just the trigger points, one per line (greppable / pipe-friendly):
+pwnariadne ./target --format endpoints
+#   0x4011c2	gets	stack-buffer-overflow
+#   0x4011f9	strcpy	stack-buffer-overflow
+# e.g. feed the addresses straight into GDB:
+pwnariadne ./target --format endpoints | cut -f1
+
 # Machine-readable output for your pipeline / write-up:
 pwnariadne ./target --format json   --output report.json
 pwnariadne ./target --format markdown --output report.md

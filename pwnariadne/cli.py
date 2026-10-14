@@ -51,9 +51,10 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument(
         "--format",
-        choices=("terminal", "markdown", "json"),
+        choices=("terminal", "endpoints", "markdown", "json"),
         default="terminal",
-        help="report format (default: terminal)",
+        help="report format: terminal table, 'endpoints' (just the trigger "
+        "points, one per line), markdown, or json (default: terminal)",
     )
     p.add_argument(
         "--output",
@@ -111,7 +112,9 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _emit_report(args, findings, mitigations) -> None:
-    if args.format == "json":
+    if args.format == "endpoints":
+        text = reporter.to_endpoints(findings)
+    elif args.format == "json":
         text = reporter.to_json(findings, mitigations)
     elif args.format == "markdown":
         text = reporter.to_markdown(findings, mitigations)
