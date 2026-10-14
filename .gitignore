@@ -15,6 +15,7 @@ htmlcov/
 
 # Compiled demo artifacts (rebuild with examples/Makefile)
 examples/vuln_demo
+examples/heap_demo
 *.o
 
 # Generated analysis output

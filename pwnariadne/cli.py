@@ -18,6 +18,12 @@ from pwnariadne.core.elf import Binary, Mitigations
 from pwnariadne.gdbgen import generator
 from pwnariadne.integrations import DebuggerFlavor, detect_debugger, detect_toolbox
 from pwnariadne.integrations.gadgets import GadgetResult, enumerate_gadgets
+from pwnariadne.integrations.libc import (
+    ChecksecResult,
+    OneGadgetResult,
+    find_one_gadgets,
+    pwntools_checksec,
+)
 from pwnariadne.report import reporter
 from pwnariadne.techniques import infer_techniques
 from pwnariadne.techniques.analyze import Signals
@@ -81,6 +87,16 @@ def build_parser() -> argparse.ArgumentParser:
         "--gadgets",
         action="store_true",
         help="enumerate useful ROP gadgets via ROPgadget/ropper (read only)",
+    )
+    p.add_argument(
+        "--libc",
+        metavar="LIBC.so",
+        help="enumerate libc one_gadget offsets from this libc (read only)",
+    )
+    p.add_argument(
+        "--checksec",
+        action="store_true",
+        help="add a pwntools checksec cross check (if pwntools is installed)",
     )
     p.add_argument(
         "--toolbox",
@@ -168,7 +184,17 @@ def main(argv: list[str] | None = None) -> int:
     if args.gadgets and args.binary:
         gadgets = enumerate_gadgets(args.binary)
 
-    _emit_report(args, findings, mitigations, techniques, gadgets)
+    onegadget: OneGadgetResult | None = None
+    if args.libc:
+        onegadget = find_one_gadgets(args.libc)
+
+    checksec: ChecksecResult | None = None
+    if args.checksec and args.binary:
+        checksec = pwntools_checksec(args.binary)
+
+    _emit_report(
+        args, findings, mitigations, techniques, gadgets, onegadget, checksec
+    )
 
     if args.gdb:
         flavor = _resolve_flavor(args.debugger)
@@ -182,24 +208,41 @@ def main(argv: list[str] | None = None) -> int:
     return 0
 
 
-def _emit_report(args, findings, mitigations, techniques, gadgets) -> None:
+def _emit_report(
+    args, findings, mitigations, techniques, gadgets, onegadget, checksec
+) -> None:
     if args.format == "endpoints":
         text = reporter.to_endpoints(findings)
     elif args.format == "json":
-        text = reporter.to_json(findings, mitigations, techniques, gadgets)
+        text = reporter.to_json(
+            findings, mitigations, techniques, gadgets, onegadget, checksec
+        )
     elif args.format == "markdown":
-        text = reporter.to_markdown(findings, mitigations, techniques, gadgets)
+        text = reporter.to_markdown(
+            findings, mitigations, techniques, gadgets, onegadget, checksec
+        )
     else:
         if args.output:
             from rich.console import Console
 
             with open(args.output, "w") as fh:
                 reporter.to_terminal(
-                    findings, mitigations, Console(file=fh), techniques, gadgets
+                    findings,
+                    mitigations,
+                    Console(file=fh),
+                    techniques,
+                    gadgets,
+                    onegadget,
+                    checksec,
                 )
             return
         reporter.to_terminal(
-            findings, mitigations, techniques=techniques, gadgets=gadgets
+            findings,
+            mitigations,
+            techniques=techniques,
+            gadgets=gadgets,
+            onegadget=onegadget,
+            checksec=checksec,
         )
         return
 

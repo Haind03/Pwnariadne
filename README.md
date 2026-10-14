@@ -134,6 +134,9 @@ pwnariadne ./target --format endpoints | cut -f1
 # See which external tools were detected, add ROP gadget recon, pick pwndbg:
 pwnariadne ./target --toolbox --gadgets --debugger pwndbg --gdb breakpoints.gdb
 
+# Add a pwntools checksec cross check and libc one_gadget offsets:
+pwnariadne ./target --checksec --libc ./libc.so.6 --gadgets
+
 # Machine-readable output for your pipeline / write-up:
 pwnariadne ./target --gadgets --format json   --output report.json
 pwnariadne ./target --gadgets --format markdown --output report.md
@@ -162,7 +165,7 @@ GDB otherwise.
 ### Example
 
 ```bash
-cd examples && make           # builds the deliberately-unsafe vuln_demo
+cd examples && make           # builds vuln_demo and heap_demo
 cd ..
 pwnariadne examples/vuln_demo --gdb demo.gdb
 ```
@@ -192,7 +195,7 @@ pwnariadne/
 └── cli.py         # command-line entry point
 assets/            # logo (SVG)
 examples/          # deliberately-unsafe sample for testing (not an exploit)
-tests/             # pytest suite (34 tests)
+tests/             # pytest suite (37 tests)
 .github/           # CI (pytest on Python 3.10 to 3.12 + CLI smoke test)
 ```
 
@@ -208,9 +211,9 @@ tests/             # pytest suite (34 tests)
 
 - [x] pwndbg / GEF aware context dumps, bug-class specific
 - [x] Multi-tool orchestration (ROPgadget/ropper, toolbox detection)
+- [x] `one_gadget` + pwntools `ELF`/`checksec` wiring into the report
 - [ ] `tree-sitter` backend for accurate source analysis
 - [ ] Indirect-call and additional-architecture support (capstone details)
-- [ ] `one_gadget` + pwntools `ELF`/`checksec` wiring into the report
 - [ ] Optional `angr` reachability hints for which inputs reach a sink
 - [ ] Taint note: whether a sink argument is constant or externally influenced
 

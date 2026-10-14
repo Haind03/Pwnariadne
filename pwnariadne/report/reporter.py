@@ -16,6 +16,7 @@ from pwnariadne import SIGNATURE, __version__
 from pwnariadne.classify.finding import Finding
 from pwnariadne.core.elf import Mitigations
 from pwnariadne.integrations.gadgets import GadgetResult
+from pwnariadne.integrations.libc import ChecksecResult, OneGadgetResult
 from pwnariadne.integrations.tools import Toolbox
 from pwnariadne.techniques import TechniqueHint
 
@@ -54,12 +55,26 @@ def to_json(
     mitigations: Mitigations | None,
     techniques: list[TechniqueHint] | None = None,
     gadgets: GadgetResult | None = None,
+    onegadget: OneGadgetResult | None = None,
+    checksec: ChecksecResult | None = None,
 ) -> str:
     payload = {
         "tool": "pwnariadne",
         "version": __version__,
         "author": SIGNATURE,
         "mitigations": mitigations.as_dict() if mitigations else None,
+        "checksec_pwntools": (
+            checksec.data if checksec and checksec.available else None
+        ),
+        "one_gadget": (
+            {
+                "libc": onegadget.libc,
+                "offsets": [hex(o) for o in onegadget.offsets],
+                "note": onegadget.note,
+            }
+            if onegadget
+            else None
+        ),
         "gadgets": (
             {
                 "tool": gadgets.tool,
@@ -105,6 +120,8 @@ def to_markdown(
     mitigations: Mitigations | None,
     techniques: list[TechniqueHint] | None = None,
     gadgets: GadgetResult | None = None,
+    onegadget: OneGadgetResult | None = None,
+    checksec: ChecksecResult | None = None,
 ) -> str:
     out: list[str] = [
         "# Pwnariadne report",
@@ -148,6 +165,12 @@ def to_markdown(
                 out.append(f"- Ref: {ref}")
             out.append("")
 
+    if checksec is not None and checksec.available:
+        out += ["", "## checksec (pwntools cross check)", ""]
+        for key, val in checksec.data.items():
+            out.append(f"- {key}: `{val}`")
+        out.append("")
+
     if gadgets is not None:
         out += ["", "## ROP gadgets (read only reconnaissance)", ""]
         if gadgets.gadgets:
@@ -160,6 +183,17 @@ def to_markdown(
             out.append(f"_No curated gadgets found. {gadgets.note}_")
         out.append("")
 
+    if onegadget is not None:
+        out += ["", "## libc one_gadget (read only reconnaissance)", ""]
+        if onegadget.offsets:
+            out.append(f"Offsets in `{onegadget.libc}`:")
+            out.append("")
+            for off in onegadget.offsets:
+                out.append(f"- `{off:#x}`")
+        else:
+            out.append(f"_No one_gadget offsets. {onegadget.note}_")
+        out.append("")
+
     return "\n".join(out) + "\n"
 
 
@@ -169,6 +203,8 @@ def to_terminal(
     console: Console | None = None,
     techniques: list[TechniqueHint] | None = None,
     gadgets: GadgetResult | None = None,
+    onegadget: OneGadgetResult | None = None,
+    checksec: ChecksecResult | None = None,
 ) -> None:
     console = console or Console()
     console.print(f"[bold cyan]Pwnariadne {__version__}[/]: {SIGNATURE}")
@@ -179,6 +215,8 @@ def to_terminal(
             f"[bold]Mitigations:[/] arch={m.arch}/{m.bits} relro={m.relro} "
             f"canary={m.canary} nx={m.nx} pie={m.pie}"
         )
+    if checksec is not None and checksec.available:
+        console.print(f"[dim]checksec (pwntools): {checksec.data}[/]")
 
     if not findings:
         console.print("[green]No sink calls found.[/]")
@@ -217,3 +255,13 @@ def to_terminal(
             console.print(gtab)
         else:
             console.print(f"[dim]No curated gadgets. {gadgets.note}[/]")
+
+    if onegadget is not None:
+        if onegadget.offsets:
+            otab = Table(title=f"libc one_gadget offsets in {onegadget.libc} (read only)")
+            otab.add_column("Offset", style="bold green")
+            for off in onegadget.offsets:
+                otab.add_row(f"{off:#x}")
+            console.print(otab)
+        else:
+            console.print(f"[dim]No one_gadget offsets. {onegadget.note}[/]")
