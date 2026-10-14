@@ -15,6 +15,7 @@ from rich.table import Table
 from pwnariadne import SIGNATURE, __version__
 from pwnariadne.classify.finding import Finding
 from pwnariadne.core.elf import IndirectCall, Mitigations
+from pwnariadne.core.offsets import OverflowOffset
 from pwnariadne.integrations.angr_reach import ReachResult
 from pwnariadne.integrations.gadgets import GadgetResult
 from pwnariadne.integrations.libc import ChecksecResult, OneGadgetResult
@@ -63,12 +64,26 @@ def to_json(
     checksec: ChecksecResult | None = None,
     indirect: list[IndirectCall] | None = None,
     reachability: ReachResult | None = None,
+    offsets: list[OverflowOffset] | None = None,
 ) -> str:
     payload = {
         "tool": "pwnariadne",
         "version": __version__,
         "author": SIGNATURE,
         "mitigations": mitigations.as_dict() if mitigations else None,
+        "overflow_offsets": [
+            {
+                "sink": o.sink,
+                "address": hex(o.call_address),
+                "function": o.in_function,
+                "offset_to_saved_rbp": o.offset_to_saved_rbp,
+                "offset_to_ret": o.offset_to_ret,
+                "offset_to_ret_hex": hex(o.offset_to_ret),
+                "confidence": o.confidence,
+                "asm": o.asm,
+            }
+            for o in (offsets or [])
+        ],
         "indirect_calls": [
             {
                 "address": hex(ic.address),
@@ -159,6 +174,7 @@ def to_markdown(
     checksec: ChecksecResult | None = None,
     indirect: list[IndirectCall] | None = None,
     reachability: ReachResult | None = None,
+    offsets: list[OverflowOffset] | None = None,
 ) -> str:
     out: list[str] = [
         "# Pwnariadne report",
@@ -178,6 +194,28 @@ def to_markdown(
             f"- PIE: `{m.pie}`",
             "",
         ]
+
+    if offsets:
+        out += ["## Overflow offsets (computed from the assembly)", "",
+                "> Padding to reach the saved return address, read off the function's "
+                "own instructions.", "",
+                "| Sink | Function | To saved RBP | To saved RIP |",
+                "|------|----------|--------------|--------------|"]
+        for o in offsets:
+            out.append(
+                f"| `{o.sink}` @ `{o.call_address:#x}` | `{o.in_function}` "
+                f"| {o.offset_to_saved_rbp} (`{o.offset_to_saved_rbp:#x}`) "
+                f"| {o.offset_to_ret} (`{o.offset_to_ret:#x}`) |"
+            )
+        out.append("")
+        for o in offsets:
+            out.append(f"<details><summary>{o.sink} @ {o.call_address:#x} assembly</summary>")
+            out.append("")
+            out.append("```")
+            out += o.asm
+            out.append("```")
+            out.append("</details>")
+            out.append("")
 
     out += ["## Findings", ""]
     if not findings:
@@ -278,6 +316,7 @@ def to_terminal(
     checksec: ChecksecResult | None = None,
     indirect: list[IndirectCall] | None = None,
     reachability: ReachResult | None = None,
+    offsets: list[OverflowOffset] | None = None,
 ) -> None:
     console = console or Console()
     console.print(f"[bold cyan]Pwnariadne {__version__}[/]: {SIGNATURE}")
@@ -290,6 +329,23 @@ def to_terminal(
         )
     if checksec is not None and checksec.available:
         console.print(f"[dim]checksec (pwntools): {checksec.data}[/]")
+
+    if offsets:
+        otab = Table(title="Overflow offsets computed from the assembly")
+        otab.add_column("Sink", style="bold red")
+        otab.add_column("Function")
+        otab.add_column("-> saved RBP")
+        otab.add_column("-> saved RIP", style="bold green")
+        otab.add_column("Conf.")
+        for o in offsets:
+            otab.add_row(
+                f"{o.sink} @ {o.call_address:#x}",
+                o.in_function,
+                f"{o.offset_to_saved_rbp} ({o.offset_to_saved_rbp:#x})",
+                f"{o.offset_to_ret} ({o.offset_to_ret:#x})",
+                o.confidence,
+            )
+        console.print(otab)
 
     if not findings:
         console.print("[green]No sink calls found.[/]")

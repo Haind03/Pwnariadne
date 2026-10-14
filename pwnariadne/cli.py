@@ -167,6 +167,7 @@ def main(argv: list[str] | None = None) -> int:
     mitigations: Mitigations | None = None
     signals = Signals()
     indirect = None
+    offsets = None
 
     if args.binary:
         try:
@@ -181,6 +182,9 @@ def main(argv: list[str] | None = None) -> int:
                     funcs=set(binary.defined_functions().values()),
                     is_static=len(imports) == 0,
                 )
+                from pwnariadne.core.offsets import solve_overflow_offsets
+
+                offsets = solve_overflow_offsets(binary)
                 if args.indirect:
                     indirect = binary.indirect_call_sites()
                     if args.format == "terminal" and not args.no_banner:
@@ -251,6 +255,7 @@ def main(argv: list[str] | None = None) -> int:
         checksec,
         indirect,
         reachability,
+        offsets,
     )
 
     if args.gdb:
@@ -275,18 +280,19 @@ def _emit_report(
     checksec,
     indirect,
     reachability,
+    offsets,
 ) -> None:
     if args.format == "endpoints":
         text = reporter.to_endpoints(findings)
     elif args.format == "json":
         text = reporter.to_json(
             findings, mitigations, techniques, gadgets, onegadget, checksec,
-            indirect, reachability,
+            indirect, reachability, offsets,
         )
     elif args.format == "markdown":
         text = reporter.to_markdown(
             findings, mitigations, techniques, gadgets, onegadget, checksec,
-            indirect, reachability,
+            indirect, reachability, offsets,
         )
     else:
         if args.output:
@@ -303,6 +309,7 @@ def _emit_report(
                     checksec,
                     indirect,
                     reachability,
+                    offsets,
                 )
             return
         reporter.to_terminal(
@@ -314,6 +321,7 @@ def _emit_report(
             checksec=checksec,
             indirect=indirect,
             reachability=reachability,
+            offsets=offsets,
         )
         return
 

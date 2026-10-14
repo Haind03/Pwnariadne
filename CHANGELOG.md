@@ -7,6 +7,11 @@ Keep a Changelog, and the project uses semantic versioning.
 
 ### Added
 
+- Overflow offset solver (`core/offsets.py`): for each stack-writing sink it
+  reads the enclosing function's instructions and computes the byte distance
+  from the destination buffer to the saved RBP and saved RIP, and shows the
+  disassembly it used. x86-64 register-arg layout. Shown in every report format.
+
 - Deeper ROP-chain analysis (`techniques/rop.py`): ret2libc chain, ret2system,
   ret2csu, stack pivot, syscall ROP / SROP and ret2dlresolve, each listing the
   gadget/symbol pieces present and still missing. Uses the `--gadgets` set.

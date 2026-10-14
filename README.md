@@ -78,6 +78,22 @@ pwndbg).
    write-up or audit note, including a **candidate-techniques** advisory and a
    curated **ROP gadget** list.
 
+## Overflow offsets (computed from the assembly)
+
+For every stack-writing sink Pwnariadne reads the function's own instructions
+and computes the exact padding to the saved return address, the way you would
+by hand from the disassembly:
+
+```
+Sink              Function     -> saved RBP   -> saved RIP
+gets @ 0x4011c2   echo_name    64 (0x40)      72 (0x48)
+strcpy @ 0x4011f9 copy_input   32 (0x20)      40 (0x28)
+```
+
+It also shows the `lea rax, [rbp - 0x40] ; mov rdi, rax ; call gets` it read the
+number off (x86-64 register-arg layout). This is static analysis of the
+assembly, not a payload.
+
 ## Technique awareness (advisory)
 
 Beyond listing sinks, Pwnariadne reasons from the mitigations + findings +
@@ -221,7 +237,7 @@ pwnariadne/
 └── cli.py         # command-line entry point
 assets/            # logo (SVG)
 examples/          # deliberately-unsafe sample for testing (not an exploit)
-tests/             # pytest suite (73 tests, 1 needs angr)
+tests/             # pytest suite (76 tests, 1 needs angr)
 .github/           # CI (pytest on Python 3.10 to 3.12 + CLI smoke test)
 ```
 
