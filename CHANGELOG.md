@@ -15,6 +15,10 @@ Keep a Changelog, and the project uses semantic versioning.
   unsorted-bin libc leak, gated by allocator version and required primitive.
 - TechniqueHint gains `present` / `missing` fields, shown in terminal, markdown
   and json.
+- Advanced heap family: House of Force / Spirit, FSOP / _IO_FILE vtable hijack
+  (gated on stdio use), and large bin attack.
+- `one_gadget` integration now parses each candidate's constraints (not just the
+  offset) and shows them in every report format.
 
 ## [0.1.0]
 

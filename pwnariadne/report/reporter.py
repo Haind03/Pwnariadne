@@ -94,6 +94,14 @@ def to_json(
             {
                 "libc": onegadget.libc,
                 "offsets": [hex(o) for o in onegadget.offsets],
+                "gadgets": [
+                    {
+                        "offset": hex(g.offset),
+                        "call": g.call,
+                        "constraints": g.constraints,
+                    }
+                    for g in onegadget.gadgets
+                ],
                 "note": onegadget.note,
             }
             if onegadget
@@ -240,7 +248,15 @@ def to_markdown(
 
     if onegadget is not None:
         out += ["", "## libc one_gadget (read only reconnaissance)", ""]
-        if onegadget.offsets:
+        if onegadget.gadgets:
+            out.append(f"Candidates in `{onegadget.libc}` (satisfy the constraints):")
+            out.append("")
+            for g in onegadget.gadgets:
+                out.append(f"- `{g.offset:#x}`  {g.call}")
+                for c in g.constraints:
+                    out.append(f"    - constraint: `{c}`")
+            out.append("")
+        elif onegadget.offsets:
             out.append(f"Offsets in `{onegadget.libc}`:")
             out.append("")
             for off in onegadget.offsets:
@@ -353,7 +369,15 @@ def to_terminal(
             console.print(f"[dim]reachability (angr): {reachability.note}[/]")
 
     if onegadget is not None:
-        if onegadget.offsets:
+        if onegadget.gadgets:
+            otab = Table(title=f"libc one_gadget candidates in {onegadget.libc} (read only)")
+            otab.add_column("Offset", style="bold green")
+            otab.add_column("Call")
+            otab.add_column("Constraints")
+            for g in onegadget.gadgets:
+                otab.add_row(f"{g.offset:#x}", g.call, "\n".join(g.constraints) or "-")
+            console.print(otab)
+        elif onegadget.offsets:
             otab = Table(title=f"libc one_gadget offsets in {onegadget.libc} (read only)")
             otab.add_column("Offset", style="bold green")
             for off in onegadget.offsets:

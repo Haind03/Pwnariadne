@@ -110,7 +110,8 @@ When heap findings are present, the heap analysis surfaces the glibc ptmalloc
 techniques to study: **use-after-free**, **double-free / tcache poisoning**,
 **overflow into chunk metadata**, **tcache poisoning (arbitrary alloc)** and an
 **unsorted-bin libc leak**, each gated by the allocator version and the
-primitive it needs.
+primitive it needs, plus the advanced family (**House of Force / Spirit**,
+**FSOP / _IO_FILE vtable hijack**, **large bin attack**).
 
 These are study maps: Pwnariadne names the pieces and the gaps, it never
 assembles a chain or emits a payload.
@@ -220,7 +221,7 @@ pwnariadne/
 └── cli.py         # command-line entry point
 assets/            # logo (SVG)
 examples/          # deliberately-unsafe sample for testing (not an exploit)
-tests/             # pytest suite (69 tests, 1 needs angr)
+tests/             # pytest suite (73 tests, 1 needs angr)
 .github/           # CI (pytest on Python 3.10 to 3.12 + CLI smoke test)
 ```
 

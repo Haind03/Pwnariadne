@@ -17,16 +17,65 @@ _ADDR_RE = re.compile(r"^(0x[0-9a-fA-F]+)\b")
 
 
 @dataclass
+class OneGadget:
+    """A single one_gadget candidate: its offset, call, and constraints."""
+
+    offset: int
+    call: str  # e.g. execve("/bin/sh", rsp+0x40, environ)
+    constraints: list[str] = field(default_factory=list)
+
+
+@dataclass
 class OneGadgetResult:
-    """libc one shot gadget offsets discovered by one_gadget."""
+    """libc one shot gadgets discovered by one_gadget."""
 
     libc: str | None
-    offsets: list[int] = field(default_factory=list)
+    offsets: list[int] = field(default_factory=list)  # kept for compatibility
+    gadgets: list[OneGadget] = field(default_factory=list)
     note: str = ""
 
 
+# A gadget header line: "0x4f2a5 execve("/bin/sh", rsp+0x40, environ)".
+_HEADER_RE = re.compile(r"^(0x[0-9a-fA-F]+)\s+(.*execve.*|.*posix_spawn.*|.*)$")
+
+
+def parse_one_gadget(output: str) -> list[OneGadget]:
+    """Parse the default (non-raw) one_gadget output into gadgets + constraints.
+
+    Format per gadget::
+
+        0x4f2a5 execve("/bin/sh", rsp+0x40, environ)
+        constraints:
+          rsp & 0xf == 0
+          rcx == NULL
+    """
+
+    gadgets: list[OneGadget] = []
+    current: OneGadget | None = None
+    in_constraints = False
+
+    for raw in output.splitlines():
+        line = raw.rstrip()
+        stripped = line.strip()
+        if not stripped:
+            in_constraints = False
+            continue
+        header = _HEADER_RE.match(stripped)
+        if header and stripped.startswith("0x") and not line.startswith(" "):
+            current = OneGadget(offset=int(header.group(1), 16), call=header.group(2).strip())
+            gadgets.append(current)
+            in_constraints = False
+            continue
+        if stripped.lower() == "constraints:":
+            in_constraints = True
+            continue
+        if in_constraints and current is not None:
+            current.constraints.append(stripped)
+    return gadgets
+
+
 def find_one_gadgets(libc_path: str, timeout: int = 60) -> OneGadgetResult:
-    """Return libc one shot gadget offsets, or a note if unavailable."""
+    """Return libc one shot gadgets with their constraints, or a note."""
 
     if not shutil.which("one_gadget"):
         return OneGadgetResult(
@@ -35,7 +84,7 @@ def find_one_gadgets(libc_path: str, timeout: int = 60) -> OneGadgetResult:
         )
     try:
         proc = subprocess.run(
-            ["one_gadget", "--raw", libc_path],
+            ["one_gadget", libc_path],
             capture_output=True,
             text=True,
             timeout=timeout,
@@ -44,14 +93,12 @@ def find_one_gadgets(libc_path: str, timeout: int = 60) -> OneGadgetResult:
     except (subprocess.SubprocessError, OSError) as exc:
         return OneGadgetResult(libc=libc_path, note=f"one_gadget failed: {exc}")
 
-    offsets: list[int] = []
-    for token in proc.stdout.split():
-        try:
-            offsets.append(int(token, 0) if token.startswith("0x") else int(token))
-        except ValueError:
-            continue
-    note = "" if offsets else "one_gadget returned no offsets"
-    return OneGadgetResult(libc=libc_path, offsets=offsets, note=note)
+    gadgets = parse_one_gadget(proc.stdout)
+    offsets = [g.offset for g in gadgets]
+    note = "" if gadgets else "one_gadget returned no gadgets"
+    return OneGadgetResult(
+        libc=libc_path, offsets=offsets, gadgets=gadgets, note=note
+    )
 
 
 @dataclass

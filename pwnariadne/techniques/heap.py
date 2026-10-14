@@ -105,4 +105,82 @@ def analyze_heap(findings: list[Finding], signals) -> list[TechniqueHint]:
             )
         )
 
+    hints.extend(_house_of_x(frees, mallocs, uaf, heap_of, signals))
     return hints
+
+
+# Functions whose presence shows the binary uses stdio (needed for FSOP).
+_STDIO = {
+    "printf", "puts", "fwrite", "fread", "fopen", "fclose", "setbuf",
+    "setvbuf", "fflush", "__isoc99_scanf", "scanf", "fgets",
+}
+
+
+def _house_of_x(frees, mallocs, uaf, heap_of, signals) -> list[TechniqueHint]:
+    """Advanced allocator-abuse techniques (house-of-* family and FSOP)."""
+
+    out: list[TechniqueHint] = []
+    imports = getattr(signals, "imports", set()) or set()
+
+    # House of Force: overwrite the top chunk size to an attacker value.
+    if heap_of:
+        out.append(
+            TechniqueHint(
+                name="heap: House of Force",
+                relevance="Overflowing into the top chunk's size field lets a crafted "
+                "malloc move the top pointer to an arbitrary address for a write.",
+                gate="glibc < 2.30 (top-size check added in 2.30 removes this)",
+                confidence="low",
+                present=["overflow reaching the top chunk size"],
+                missing=["an attacker-controlled malloc size", "a target address"],
+                references=["https://github.com/shellphish/how2heap"],
+            )
+        )
+
+    # House of Spirit: free a fake chunk you control, then reallocate it.
+    if frees and (heap_of or uaf):
+        out.append(
+            TechniqueHint(
+                name="heap: House of Spirit",
+                relevance="Free a forged chunk located in attacker-controlled memory "
+                "(stack/bss); the next malloc of that size hands the region back.",
+                gate="needs a fake chunk with valid size and a free of its pointer",
+                confidence="low",
+                present=["a free of an attacker-influenced pointer"],
+                missing=["a forged chunk header (size, alignment)"],
+                references=["https://github.com/shellphish/how2heap"],
+            )
+        )
+
+    # FSOP / House of Orange: hijack the _IO_FILE vtable.
+    if (uaf or heap_of or len(frees) >= 2) and (imports & _STDIO):
+        out.append(
+            TechniqueHint(
+                name="heap: FSOP / _IO_FILE vtable hijack",
+                relevance="The binary uses stdio; corrupting an _IO_FILE structure (or "
+                "_IO_list_all) and its vtable turns the next stdio call into controlled "
+                "execution. House of Orange reaches this from an unsorted-bin overlap.",
+                gate="glibc-dependent; 2.24+ adds vtable checks (use _IO_str_jumps etc.)",
+                confidence="low",
+                present=["heap corruption primitive", "stdio in use"],
+                missing=["an _IO_FILE overwrite path", "the libc base (leak first)"],
+                references=["https://github.com/shellphish/how2heap"],
+            )
+        )
+
+    # Large bin attack: write a controlled value via large-bin insertion.
+    if frees and mallocs:
+        out.append(
+            TechniqueHint(
+                name="heap: large bin attack",
+                relevance="Corrupting a large-bin chunk's bk_nextsize writes a heap/libc "
+                "pointer (or controlled value) to a chosen address during insertion.",
+                gate="glibc 2.23-2.29 class of attacks; a known target to overwrite",
+                confidence="low",
+                present=["free/alloc of large (> 0x400) chunks"],
+                missing=["a write into a freed large-bin chunk", "a target pointer"],
+                references=["https://github.com/shellphish/how2heap"],
+            )
+        )
+
+    return out
