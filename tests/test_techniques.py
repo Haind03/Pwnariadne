@@ -31,7 +31,7 @@ def test_canary_requires_leak_first():
 
 def test_nx_off_suggests_shellcode():
     hints = infer_techniques(_mit(nx=False), [_finding("gets")])
-    assert "ret2shellcode (NX off)" in _names(hints)
+    assert "ret2shellcode" in _names(hints)
 
 
 def test_nx_on_suggests_rop():
@@ -67,3 +67,15 @@ def test_no_mitigations_yields_fmt_only():
     # Without a binary (mitigations=None) only mitigation-independent hints appear.
     hints = infer_techniques(None, [_finding("printf")])
     assert "format-string read (leak)" in _names(hints)
+
+
+def test_rwx_segment_suggests_shellcode_even_with_nx():
+    from pwnariadne.techniques.hint import Signals
+    hints = infer_techniques(_mit(nx=True), [_finding("gets")], Signals(rwx=True))
+    assert "ret2shellcode" in _names(hints)
+
+
+def test_mprotect_import_suggests_rwx_pivot():
+    from pwnariadne.techniques.hint import Signals
+    hints = infer_techniques(_mit(nx=True), [_finding("gets")], Signals(imports={"mprotect"}))
+    assert any("mprotect" in h.name for h in hints)

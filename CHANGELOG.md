@@ -7,6 +7,10 @@ Keep a Changelog, and the project uses semantic versioning.
 
 ### Added
 
+- RWX detection (`Binary.has_rwx_segment`): a writable+executable segment, or
+  an imported mprotect/mmap, keeps ret2shellcode on the table even under NX and
+  adds an 'mprotect/mmap to RWX then shellcode' hint.
+
 - GOT dump (`Binary.got_entries`, `--got`): lists each imported function's GOT
   slot and notes whether it is writable (RELRO != full) or read-only.
 - PIE note: when the binary is PIE, the report states that all addresses are

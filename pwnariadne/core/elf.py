@@ -156,6 +156,16 @@ class Binary:
                 return not bool(seg["p_flags"] & 0x1)  # PF_X cleared => NX on
         return True  # no GNU_STACK header => NX by default on modern toolchains
 
+    def has_rwx_segment(self) -> bool:
+        """True if any loadable segment is both writable and executable (W^X off)."""
+
+        for seg in self.elf.iter_segments():
+            if seg["p_type"] == "PT_LOAD":
+                flags = seg["p_flags"]
+                if (flags & 0x2) and (flags & 0x1):  # PF_W and PF_X
+                    return True
+        return False
+
     def _is_pie(self) -> bool:
         if self.elf["e_type"] == "ET_DYN":
             dyn = self._dynamic_section()

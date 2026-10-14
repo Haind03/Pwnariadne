@@ -245,6 +245,7 @@ def main(argv: list[str] | None = None) -> int:
                     funcs=set(binary.defined_functions().values()),
                     is_static=len(imports) == 0,
                     seccomp=binary.uses_seccomp(),
+                    rwx=binary.has_rwx_segment(),
                 )
                 from pwnariadne.core.offsets import solve_overflow_offsets
 

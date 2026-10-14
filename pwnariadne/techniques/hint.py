@@ -16,6 +16,7 @@ class Signals:
     funcs: set[str] = field(default_factory=set)  # defined function names
     is_static: bool = False  # statically linked (no dynamic imports)
     seccomp: bool = False  # binary installs a seccomp filter (execve likely blocked)
+    rwx: bool = False  # a loadable segment is writable and executable (W^X off)
 
 
 @dataclass

@@ -63,17 +63,20 @@ def infer_techniques(
 
     # --- what to do once control flow is hijackable -----------------------
     if has_stack_of and m is not None:
-        if not m.nx:
+        if not m.nx or signals.rwx:
+            why = ("NX is disabled" if not m.nx
+                   else "a loadable segment is writable+executable (W^X off)")
             hints.append(
                 TechniqueHint(
-                    name="ret2shellcode (NX off)",
-                    relevance="Writable+executable memory (NX disabled) means injected "
-                    "code in a buffer can be executed.",
-                    gate="nx=False",
+                    name="ret2shellcode",
+                    relevance=f"{why}, so injected code in a known/leakable buffer can "
+                    "be executed directly.",
+                    gate="nx=False or an RWX region; you need its address",
                     confidence="high",
+                    present=(["RWX segment"] if signals.rwx else ["NX disabled"]),
                 )
             )
-        else:
+        if m.nx:
             hints.append(
                 TechniqueHint(
                     name="ROP / ret2libc (NX on)",
@@ -84,6 +87,20 @@ def infer_techniques(
                     references=["https://ir0nstone.gitbook.io/notes/types/stack/return-oriented-programming"],
                 )
             )
+            if "mprotect" in signals.imports or "mmap" in signals.imports:
+                hints.append(
+                    TechniqueHint(
+                        name="mprotect/mmap to RWX then shellcode",
+                        relevance="mprotect/mmap is imported: a ROP chain can mark a "
+                        "region RWX (or map one), copy shellcode in, and jump to it, "
+                        "sidestepping NX without a full libc call chain.",
+                        gate="nx=True but mprotect/mmap reachable",
+                        confidence="medium",
+                        present=[g for g in ("mprotect", "mmap") if g in signals.imports],
+                        missing=["gadgets to set rdi/rsi/rdx for the mprotect call"],
+                        references=["https://ir0nstone.gitbook.io/notes/types/stack/return-oriented-programming"],
+                    )
+                )
         if signals.win_symbols:
             if signals.win_addrs and not m.pie:
                 targets = [f"{n} @ {signals.win_addrs[n]:#x}"

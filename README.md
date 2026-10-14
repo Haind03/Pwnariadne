@@ -272,7 +272,7 @@ pwnariadne/
 └── cli.py         # command-line entry point
 assets/            # logo (SVG)
 examples/          # deliberately-unsafe sample for testing (not an exploit)
-tests/             # pytest suite (96 tests, 1 needs angr)
+tests/             # pytest suite (98 tests, 1 needs angr)
 .github/           # CI (pytest on Python 3.10 to 3.12 + CLI smoke test)
 ```
 
