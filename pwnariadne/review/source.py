@@ -1,9 +1,16 @@
-"""Lightweight C source review.
+"""C source review.
 
-A regex line scanner that flags calls to known sink functions. It is
-deliberately simple (no full parser) so it runs with zero extra dependencies;
-it favours recall over precision, so treat every hit as a lead to verify, not
-a confirmed bug. A tree-sitter backend can replace this later for accuracy.
+Two backends share one entry point:
+
+* tree-sitter (preferred): parses the real syntax tree, so it knows the
+  enclosing function, handles calls split across lines, and skips a constant
+  ``printf`` format string instead of flagging it.
+* regex line scanner (fallback): zero extra dependencies, favours recall, so
+  every hit is a lead to verify.
+
+``review_source`` picks tree-sitter automatically when it is importable, and
+falls back to the regex scanner otherwise. Pass ``backend="regex"`` to force the
+scanner, or ``backend="treesitter"`` to require the parser.
 """
 
 from __future__ import annotations
@@ -12,6 +19,7 @@ import re
 from pathlib import Path
 
 from pwnariadne.classify.finding import Finding
+from pwnariadne.review import treesitter_c
 from pwnariadne.review.sinks import SINKS, lookup
 
 # Build one pattern: a sink name as a whole word, immediately followed by "(".
@@ -21,14 +29,31 @@ _CALL_RE = re.compile(r"\b(" + "|".join(map(re.escape, _NAMES)) + r")\s*\(")
 _COMMENT_RE = re.compile(r"^\s*(//|\*|/\*)")
 
 
-def review_source(paths: list[str]) -> list[Finding]:
-    """Scan the given .c/.h files (or directories) for sink calls."""
+def review_source(paths: list[str], backend: str = "auto") -> list[Finding]:
+    """Scan the given .c/.h files (or directories) for sink calls.
+
+    ``backend`` is "auto" (tree-sitter if available, else regex), "treesitter",
+    or "regex".
+    """
+
+    if backend == "treesitter" or (backend == "auto" and treesitter_c.available()):
+        return treesitter_c.review_sources(paths)
 
     findings: list[Finding] = []
     for raw in paths:
         for file in _expand(raw):
             findings.extend(_scan_file(file))
     return sorted(findings, key=lambda f: f.severity, reverse=True)
+
+
+def active_backend(backend: str = "auto") -> str:
+    """Report which backend ``review_source`` would use for ``backend``."""
+
+    if backend == "regex":
+        return "regex"
+    if backend == "treesitter":
+        return "treesitter"
+    return "treesitter" if treesitter_c.available() else "regex"
 
 
 def _expand(raw: str) -> list[Path]:

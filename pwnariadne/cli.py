@@ -72,6 +72,13 @@ def build_parser() -> argparse.ArgumentParser:
         help="C source file or directory to also scan (repeatable)",
     )
     p.add_argument(
+        "--source-backend",
+        choices=("auto", "treesitter", "regex"),
+        default="auto",
+        help="C source backend: tree-sitter (accurate) or regex (no deps). "
+        "Default auto, preferring tree-sitter when installed",
+    )
+    p.add_argument(
         "--gdb",
         metavar="OUT.gdb",
         help="write a debugger breakpoint script to this path",
@@ -168,9 +175,14 @@ def main(argv: list[str] | None = None) -> int:
             return 1
 
     if args.source:
-        from pwnariadne.review.source import review_source
+        from pwnariadne.review.source import active_backend, review_source
 
-        findings.extend(review_source(args.source))
+        findings.extend(review_source(args.source, backend=args.source_backend))
+        if args.format == "terminal" and not args.no_banner:
+            print(
+                f"[pwnariadne] source backend: {active_backend(args.source_backend)}",
+                file=sys.stderr,
+            )
 
     findings.sort(key=lambda f: f.severity, reverse=True)
 

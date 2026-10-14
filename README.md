@@ -141,13 +141,14 @@ pwnariadne ./target --checksec --libc ./libc.so.6 --gadgets
 pwnariadne ./target --gadgets --format json   --output report.json
 pwnariadne ./target --gadgets --format markdown --output report.md
 
-# Source-only review (no binary):
-pwnariadne --source src/ --format markdown --output report.md
+# Source-only review (tree-sitter when installed, else regex):
+pwnariadne --source src/ --source-backend auto --format markdown --output report.md
 ```
 
 ### Install optional integrations
 
 ```bash
+pip install -e ".[source]"         # tree-sitter accurate C review
 pip install -e ".[integrations]"   # ROPgadget + pwntools
 # pwndbg / GEF / one_gadget: install per their own docs; auto-detected at runtime
 ```
@@ -186,7 +187,7 @@ Mitigations: arch=x64/64 relro=partial canary=False nx=True pie=False
 ```
 pwnariadne/
 ├── core/          # ELF loading, mitigations, PLT/call-site disasm, strings/symbols
-├── review/        # sink catalogue + binary and source scanners
+├── review/        # sink catalogue + binary scan + tree-sitter/regex source scan
 ├── classify/      # map call sites to ranked, classified findings
 ├── techniques/    # advisory technique inference (ret2win/ROP/fmt/GOT/heap)
 ├── integrations/  # detect + drive pwndbg/GEF/ROPgadget/ropper/one_gadget/pwntools
@@ -195,7 +196,7 @@ pwnariadne/
 └── cli.py         # command-line entry point
 assets/            # logo (SVG)
 examples/          # deliberately-unsafe sample for testing (not an exploit)
-tests/             # pytest suite (37 tests)
+tests/             # pytest suite (42 tests)
 .github/           # CI (pytest on Python 3.10 to 3.12 + CLI smoke test)
 ```
 
@@ -203,8 +204,9 @@ tests/             # pytest suite (37 tests)
 
 - Disassembly covers **x86 / x86-64** direct calls into the PLT. Indirect calls
   (through registers / vtables) and other architectures are not resolved yet.
-- The source scanner is a regex line scanner: it favours recall, so **expect
-  false positives**: every finding is a lead to verify, not a confirmed bug.
+- Source review uses **tree-sitter** when installed (accurate: knows the
+  enclosing function, skips constant `printf` formats) and falls back to a
+  regex line scanner otherwise. Either way, verify each finding.
 - Mitigation detection mirrors common `checksec` heuristics.
 
 ## Roadmap
@@ -212,7 +214,7 @@ tests/             # pytest suite (37 tests)
 - [x] pwndbg / GEF aware context dumps, bug-class specific
 - [x] Multi-tool orchestration (ROPgadget/ropper, toolbox detection)
 - [x] `one_gadget` + pwntools `ELF`/`checksec` wiring into the report
-- [ ] `tree-sitter` backend for accurate source analysis
+- [x] `tree-sitter` backend for accurate source analysis
 - [ ] Indirect-call and additional-architecture support (capstone details)
 - [ ] Optional `angr` reachability hints for which inputs reach a sink
 - [ ] Taint note: whether a sink argument is constant or externally influenced

@@ -152,6 +152,17 @@ def detect_toolbox() -> Toolbox:
         Tool("one_gadget", "libc", bool(one_gadget), one_gadget, "libc one-shot gadgets")
     )
 
+    # Source parsing backend.
+    tools.append(
+        Tool(
+            "tree-sitter-c",
+            "library",
+            _has_module("tree_sitter") and _has_module("tree_sitter_c"),
+            None,
+            "accurate C source review",
+        )
+    )
+
     # pwntools and checksec.
     tools.append(
         Tool("pwntools", "library", _has_module("pwn"), None, "ELF/checksec/ROP helpers")

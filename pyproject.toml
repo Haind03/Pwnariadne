@@ -27,7 +27,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8.0"]
+dev = ["pytest>=8.0", "tree-sitter>=0.21", "tree-sitter-c>=0.21"]
+# Accurate C source parsing backend.
+source = ["tree-sitter>=0.21", "tree-sitter-c>=0.21"]
 # Optional external tooling Pwnariadne will orchestrate when present.
 integrations = ["ROPgadget>=7.0", "pwntools>=4.11"]
 
