@@ -114,6 +114,13 @@ payloads, ROP chains, or offsets.
 | format-string + RELRO ≠ full | GOT overwrite (`%n`) | writable GOT |
 | `malloc`/`free` present | UAF / double-free / tcache study | allocator-dependent |
 
+### GOT and PIE
+
+`--got` lists each imported function's GOT slot and says whether it is writable
+(RELRO not full, the classic overwrite target) or read-only. When the binary is
+PIE, every reported address is flagged as a file offset that needs a runtime
+base leak.
+
 ### ret2win address and the format-string helper
 
 When a `win`/backdoor function is defined and the binary is not PIE, the
@@ -265,7 +272,7 @@ pwnariadne/
 └── cli.py         # command-line entry point
 assets/            # logo (SVG)
 examples/          # deliberately-unsafe sample for testing (not an exploit)
-tests/             # pytest suite (93 tests, 1 needs angr)
+tests/             # pytest suite (96 tests, 1 needs angr)
 .github/           # CI (pytest on Python 3.10 to 3.12 + CLI smoke test)
 ```
 

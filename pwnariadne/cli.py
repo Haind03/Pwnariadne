@@ -116,6 +116,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="check which sink addresses are reachable from entry (needs angr)",
     )
     p.add_argument(
+        "--got",
+        action="store_true",
+        help="list the GOT entries (overwrite targets when RELRO is not full)",
+    )
+    p.add_argument(
         "--cyclic",
         action="store_true",
         help="print a De Bruijn pattern to verify the computed overflow offset",
@@ -224,6 +229,7 @@ def main(argv: list[str] | None = None) -> int:
     signals = Signals()
     indirect = None
     offsets = None
+    got = None
 
     if args.binary:
         try:
@@ -243,6 +249,8 @@ def main(argv: list[str] | None = None) -> int:
                 from pwnariadne.core.offsets import solve_overflow_offsets
 
                 offsets = solve_overflow_offsets(binary)
+                if args.got:
+                    got = binary.got_entries()
                 if args.indirect:
                     indirect = binary.indirect_call_sites()
                     if args.format == "terminal" and not args.no_banner:
@@ -314,6 +322,7 @@ def main(argv: list[str] | None = None) -> int:
         indirect,
         reachability,
         offsets,
+        got,
     )
 
     if args.cyclic and offsets:
@@ -348,18 +357,19 @@ def _emit_report(
     indirect,
     reachability,
     offsets,
+    got,
 ) -> None:
     if args.format == "endpoints":
         text = reporter.to_endpoints(findings)
     elif args.format == "json":
         text = reporter.to_json(
             findings, mitigations, techniques, gadgets, onegadget, checksec,
-            indirect, reachability, offsets,
+            indirect, reachability, offsets, got,
         )
     elif args.format == "markdown":
         text = reporter.to_markdown(
             findings, mitigations, techniques, gadgets, onegadget, checksec,
-            indirect, reachability, offsets,
+            indirect, reachability, offsets, got,
         )
     else:
         if args.output:
@@ -377,6 +387,7 @@ def _emit_report(
                     indirect,
                     reachability,
                     offsets,
+                    got,
                 )
             return
         reporter.to_terminal(
@@ -389,6 +400,7 @@ def _emit_report(
             indirect=indirect,
             reachability=reachability,
             offsets=offsets,
+            got=got,
         )
         return
 

@@ -65,12 +65,14 @@ def to_json(
     indirect: list[IndirectCall] | None = None,
     reachability: ReachResult | None = None,
     offsets: list[OverflowOffset] | None = None,
+    got: dict | None = None,
 ) -> str:
     payload = {
         "tool": "pwnariadne",
         "version": __version__,
         "author": SIGNATURE,
         "mitigations": mitigations.as_dict() if mitigations else None,
+        "got": {sym: hex(addr) for sym, addr in (got or {}).items()},
         "overflow_offsets": [
             {
                 "sink": o.sink,
@@ -176,6 +178,7 @@ def to_markdown(
     indirect: list[IndirectCall] | None = None,
     reachability: ReachResult | None = None,
     offsets: list[OverflowOffset] | None = None,
+    got: dict | None = None,
 ) -> str:
     out: list[str] = [
         "# Pwnariadne report",
@@ -195,6 +198,18 @@ def to_markdown(
             f"- PIE: `{m.pie}`",
             "",
         ]
+        if m.pie:
+            out += ["> PIE is enabled: every address below is a file offset from "
+                    "the image base. Leak the base at runtime and add it.", ""]
+
+    if got:
+        writable = not (mitigations and mitigations.relro == "full")
+        state = "writable (overwrite targets)" if writable else "read-only (Full RELRO)"
+        out += ["## GOT entries", "", f"GOT is {state}.", "",
+                "| Symbol | GOT address |", "|--------|-------------|"]
+        for sym, addr in got.items():
+            out.append(f"| `{sym}` | `{addr:#x}` |")
+        out.append("")
 
     if offsets:
         out += ["## Overflow offsets (computed from the assembly)", "",
@@ -329,6 +344,7 @@ def to_terminal(
     indirect: list[IndirectCall] | None = None,
     reachability: ReachResult | None = None,
     offsets: list[OverflowOffset] | None = None,
+    got: dict | None = None,
 ) -> None:
     console = console or Console()
     console.print(f"[bold cyan]Pwnariadne {__version__}[/]: {SIGNATURE}")
@@ -341,6 +357,21 @@ def to_terminal(
         )
     if checksec is not None and checksec.available:
         console.print(f"[dim]checksec (pwntools): {checksec.data}[/]")
+    if mitigations and mitigations.pie:
+        console.print(
+            "[yellow]PIE enabled:[/] addresses below are file offsets; "
+            "add the leaked image base at runtime"
+        )
+
+    if got:
+        writable = not (mitigations and mitigations.relro == "full")
+        state = "[red]writable[/]" if writable else "[green]read-only[/]"
+        gtab = Table(title=f"GOT entries ({state} )")
+        gtab.add_column("Symbol", style="bold")
+        gtab.add_column("GOT address")
+        for sym, addr in got.items():
+            gtab.add_row(sym, f"{addr:#x}")
+        console.print(gtab)
 
     if offsets:
         otab = Table(title="Overflow offsets computed from the assembly")

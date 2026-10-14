@@ -7,6 +7,11 @@ Keep a Changelog, and the project uses semantic versioning.
 
 ### Added
 
+- GOT dump (`Binary.got_entries`, `--got`): lists each imported function's GOT
+  slot and notes whether it is writable (RELRO != full) or read-only.
+- PIE note: when the binary is PIE, the report states that all addresses are
+  file offsets needing a runtime base leak.
+
 - ret2win now reports the win function's concrete address when the binary is
   not PIE (file-offset + base-leak note under PIE).
 - GDB `pa_fmt` command for format-string breakpoints: labels rsi/rdx/rcx/r8/r9

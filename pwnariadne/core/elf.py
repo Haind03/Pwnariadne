@@ -451,6 +451,31 @@ class Binary:
             )
         return out
 
+    def got_entries(self) -> dict[str, int]:
+        """Map imported function name -> its GOT slot address (from JMPREL).
+
+        When RELRO is not full these slots are writable, so they are the classic
+        targets of a GOT-overwrite (format-string %n, an arbitrary write, etc.).
+        """
+
+        rela = None
+        for name in (".rela.plt", ".rel.plt"):
+            sec = self.elf.get_section_by_name(name)
+            if isinstance(sec, RelocationSection):
+                rela = sec
+                break
+        if rela is None:
+            return {}
+        dynsym = self.elf.get_section_by_name(".dynsym")
+        if not isinstance(dynsym, SymbolTableSection):
+            return {}
+        out: dict[str, int] = {}
+        for reloc in rela.iter_relocations():
+            sym = dynsym.get_symbol(reloc["r_info_sym"])
+            if sym.name:
+                out[sym.name] = reloc["r_offset"]
+        return out
+
     def architecture_note(self) -> str:
         """A short note on how fully this architecture is supported."""
 
