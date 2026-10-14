@@ -106,6 +106,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="add a pwntools checksec cross check (if pwntools is installed)",
     )
     p.add_argument(
+        "--indirect",
+        action="store_true",
+        help="list indirect dispatch points (function pointer / vtable / GOT calls)",
+    )
+    p.add_argument(
         "--toolbox",
         action="store_true",
         help="print which external tools were detected, then continue",
@@ -156,6 +161,7 @@ def main(argv: list[str] | None = None) -> int:
     findings = []
     mitigations: Mitigations | None = None
     signals = Signals()
+    indirect = None
 
     if args.binary:
         try:
@@ -167,6 +173,13 @@ def main(argv: list[str] | None = None) -> int:
                     imports=binary.imported_functions(),
                     strings=binary.interesting_strings(),
                 )
+                if args.indirect:
+                    indirect = binary.indirect_call_sites()
+                    if args.format == "terminal" and not args.no_banner:
+                        print(
+                            f"[pwnariadne] {binary.architecture_note()}",
+                            file=sys.stderr,
+                        )
         except FileNotFoundError:
             print(f"error: no such file: {args.binary}", file=sys.stderr)
             return 2
@@ -209,7 +222,7 @@ def main(argv: list[str] | None = None) -> int:
         checksec = pwntools_checksec(args.binary)
 
     _emit_report(
-        args, findings, mitigations, techniques, gadgets, onegadget, checksec
+        args, findings, mitigations, techniques, gadgets, onegadget, checksec, indirect
     )
 
     if args.gdb:
@@ -225,17 +238,17 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _emit_report(
-    args, findings, mitigations, techniques, gadgets, onegadget, checksec
+    args, findings, mitigations, techniques, gadgets, onegadget, checksec, indirect
 ) -> None:
     if args.format == "endpoints":
         text = reporter.to_endpoints(findings)
     elif args.format == "json":
         text = reporter.to_json(
-            findings, mitigations, techniques, gadgets, onegadget, checksec
+            findings, mitigations, techniques, gadgets, onegadget, checksec, indirect
         )
     elif args.format == "markdown":
         text = reporter.to_markdown(
-            findings, mitigations, techniques, gadgets, onegadget, checksec
+            findings, mitigations, techniques, gadgets, onegadget, checksec, indirect
         )
     else:
         if args.output:
@@ -250,6 +263,7 @@ def _emit_report(
                     gadgets,
                     onegadget,
                     checksec,
+                    indirect,
                 )
             return
         reporter.to_terminal(
@@ -259,6 +273,7 @@ def _emit_report(
             gadgets=gadgets,
             onegadget=onegadget,
             checksec=checksec,
+            indirect=indirect,
         )
         return
 

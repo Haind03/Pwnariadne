@@ -137,6 +137,9 @@ pwnariadne ./target --toolbox --gadgets --debugger pwndbg --gdb breakpoints.gdb
 # Add a pwntools checksec cross check and libc one_gadget offsets:
 pwnariadne ./target --checksec --libc ./libc.so.6 --gadgets
 
+# List indirect dispatch points (function pointer / vtable / GOT calls):
+pwnariadne ./target --indirect
+
 # Machine-readable output for your pipeline / write-up:
 pwnariadne ./target --gadgets --format json   --output report.json
 pwnariadne ./target --gadgets --format markdown --output report.md
@@ -196,7 +199,7 @@ pwnariadne/
 └── cli.py         # command-line entry point
 assets/            # logo (SVG)
 examples/          # deliberately-unsafe sample for testing (not an exploit)
-tests/             # pytest suite (48 tests)
+tests/             # pytest suite (51 tests)
 .github/           # CI (pytest on Python 3.10 to 3.12 + CLI smoke test)
 ```
 
@@ -215,7 +218,7 @@ tests/             # pytest suite (48 tests)
 - [x] Multi-tool orchestration (ROPgadget/ropper, toolbox detection)
 - [x] `one_gadget` + pwntools `ELF`/`checksec` wiring into the report
 - [x] `tree-sitter` backend for accurate source analysis
-- [ ] Indirect-call and additional-architecture support (capstone details)
+- [x] Indirect-call detection; arch-aware disassembly (x86/x64 full, ARM/AArch64/MIPS indirect)
 - [ ] Optional `angr` reachability hints for which inputs reach a sink
 - [x] Taint note: whether a sink argument is constant or externally influenced
 

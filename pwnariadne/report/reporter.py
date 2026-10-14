@@ -14,7 +14,7 @@ from rich.table import Table
 
 from pwnariadne import SIGNATURE, __version__
 from pwnariadne.classify.finding import Finding
-from pwnariadne.core.elf import Mitigations
+from pwnariadne.core.elf import IndirectCall, Mitigations
 from pwnariadne.integrations.gadgets import GadgetResult
 from pwnariadne.integrations.libc import ChecksecResult, OneGadgetResult
 from pwnariadne.integrations.tools import Toolbox
@@ -60,12 +60,22 @@ def to_json(
     gadgets: GadgetResult | None = None,
     onegadget: OneGadgetResult | None = None,
     checksec: ChecksecResult | None = None,
+    indirect: list[IndirectCall] | None = None,
 ) -> str:
     payload = {
         "tool": "pwnariadne",
         "version": __version__,
         "author": SIGNATURE,
         "mitigations": mitigations.as_dict() if mitigations else None,
+        "indirect_calls": [
+            {
+                "address": hex(ic.address),
+                "function": ic.in_function,
+                "mnemonic": ic.mnemonic,
+                "operand": ic.operand,
+            }
+            for ic in (indirect or [])
+        ],
         "checksec_pwntools": (
             checksec.data if checksec and checksec.available else None
         ),
@@ -126,6 +136,7 @@ def to_markdown(
     gadgets: GadgetResult | None = None,
     onegadget: OneGadgetResult | None = None,
     checksec: ChecksecResult | None = None,
+    indirect: list[IndirectCall] | None = None,
 ) -> str:
     out: list[str] = [
         "# Pwnariadne report",
@@ -187,6 +198,16 @@ def to_markdown(
             out.append(f"_No curated gadgets found. {gadgets.note}_")
         out.append("")
 
+    if indirect:
+        out += ["", "## Indirect dispatch points (unresolved targets)", "",
+                "> Function pointer / vtable / GOT calls. The target is not "
+                "statically known; set a breakpoint to see it at runtime.", "",
+                "| Address | Function | Instruction |",
+                "|---------|----------|-------------|"]
+        for ic in indirect:
+            out.append(f"| `{ic.address:#x}` | `{ic.in_function}` | `{ic.mnemonic} {ic.operand}` |")
+        out.append("")
+
     if onegadget is not None:
         out += ["", "## libc one_gadget (read only reconnaissance)", ""]
         if onegadget.offsets:
@@ -209,6 +230,7 @@ def to_terminal(
     gadgets: GadgetResult | None = None,
     onegadget: OneGadgetResult | None = None,
     checksec: ChecksecResult | None = None,
+    indirect: list[IndirectCall] | None = None,
 ) -> None:
     console = console or Console()
     console.print(f"[bold cyan]Pwnariadne {__version__}[/]: {SIGNATURE}")
@@ -270,6 +292,15 @@ def to_terminal(
             console.print(gtab)
         else:
             console.print(f"[dim]No curated gadgets. {gadgets.note}[/]")
+
+    if indirect:
+        itab = Table(title="Indirect dispatch points (unresolved targets)")
+        itab.add_column("Address", style="bold")
+        itab.add_column("Function")
+        itab.add_column("Instruction", style="magenta")
+        for ic in indirect:
+            itab.add_row(f"{ic.address:#x}", ic.in_function, f"{ic.mnemonic} {ic.operand}")
+        console.print(itab)
 
     if onegadget is not None:
         if onegadget.offsets:

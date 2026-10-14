@@ -8,7 +8,20 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from capstone import CS_ARCH_X86, CS_MODE_32, CS_MODE_64, Cs
+from capstone import (
+    CS_ARCH_ARM,
+    CS_ARCH_ARM64,
+    CS_ARCH_MIPS,
+    CS_ARCH_X86,
+    CS_MODE_32,
+    CS_MODE_64,
+    CS_MODE_ARM,
+    CS_MODE_BIG_ENDIAN,
+    CS_MODE_LITTLE_ENDIAN,
+    CS_MODE_MIPS32,
+    CS_MODE_MIPS64,
+    Cs,
+)
 from elftools.elf.dynamic import DynamicSection
 from elftools.elf.elffile import ELFFile
 from elftools.elf.relocation import RelocationSection
@@ -44,6 +57,26 @@ class CallSite:
     address: int  # virtual address of the call instruction
     target_symbol: str  # resolved imported name, e.g. "gets"
     in_function: str  # nearest preceding function symbol, or "?"
+
+
+@dataclass
+class IndirectCall:
+    """An indirect call or branch: a function pointer / vtable / GOT dispatch."""
+
+    address: int
+    in_function: str
+    mnemonic: str
+    operand: str  # the target expression, e.g. "rax" or "qword ptr [rip + 0x..]"
+
+
+# Mnemonics that perform an indirect call-and-link, keyed by capstone arch name.
+_INDIRECT_CALL_MNEMONICS: dict[str, frozenset[str]] = {
+    "x86": frozenset({"call"}),
+    "x64": frozenset({"call"}),
+    "arm": frozenset({"blx", "blr"}),
+    "arm64": frozenset({"blr"}),
+    "mips": frozenset({"jalr"}),
+}
 
 
 def _ascii_strings(blob: bytes, min_len: int = 4) -> list[str]:
@@ -255,13 +288,49 @@ class Binary:
                 mapping[plt_sec["sh_addr"] + idx * entry_size] = name
         return mapping
 
+    # -- disassembler ------------------------------------------------------
+
+    def _disassembler(self) -> Cs | None:
+        """Return a capstone disassembler configured for this binary's arch."""
+
+        endian = (
+            CS_MODE_LITTLE_ENDIAN
+            if self.elf.little_endian
+            else CS_MODE_BIG_ENDIAN
+        )
+        if self.arch in ("x86", "x64"):
+            return Cs(CS_ARCH_X86, CS_MODE_64 if self.bits == 64 else CS_MODE_32)
+        if self.arch == "ARM":
+            return Cs(CS_ARCH_ARM, CS_MODE_ARM | endian)
+        if self.arch in ("AArch64", "ARM64"):
+            return Cs(CS_ARCH_ARM64, endian)
+        if self.arch == "MIPS":
+            mode = CS_MODE_MIPS64 if self.bits == 64 else CS_MODE_MIPS32
+            return Cs(CS_ARCH_MIPS, mode | endian)
+        return None
+
+    def _cs_arch_name(self) -> str:
+        if self.arch in ("x86", "x64"):
+            return self.arch
+        if self.arch == "ARM":
+            return "arm"
+        if self.arch in ("AArch64", "ARM64"):
+            return "arm64"
+        if self.arch == "MIPS":
+            return "mips"
+        return "unknown"
+
     # -- call sites --------------------------------------------------------
 
     def call_sites(self) -> list[CallSite]:
-        """Find direct calls into the PLT that resolve to imported functions."""
+        """Find direct calls into the PLT that resolve to imported functions.
+
+        PLT resolution is implemented for x86 / x86-64; other architectures
+        return no direct call sites (use ``indirect_call_sites`` there).
+        """
 
         if self.arch not in ("x86", "x64"):
-            return []  # v0.1 disassembles x86 / x86-64 only
+            return []
 
         text = self.elf.get_section_by_name(".text")
         if text is None:
@@ -271,8 +340,9 @@ class Binary:
         if not plt_map:
             return []
 
-        mode = CS_MODE_64 if self.bits == 64 else CS_MODE_32
-        md = Cs(CS_ARCH_X86, mode)
+        md = self._disassembler()
+        if md is None:
+            return []
         md.detail = False
 
         code = text.data()
@@ -303,6 +373,58 @@ class Binary:
                 )
             )
         return sites
+
+    def indirect_call_sites(self) -> list[IndirectCall]:
+        """Enumerate indirect calls (function pointer / vtable / GOT dispatch).
+
+        These are control-flow points whose target cannot be read statically.
+        Supported on x86 / x86-64 (``call`` through a register or memory) and,
+        best effort, on ARM / AArch64 / MIPS branch-and-link register forms.
+        """
+
+        md = self._disassembler()
+        if md is None:
+            return []
+        text = self.elf.get_section_by_name(".text")
+        if text is None:
+            return []
+
+        mnemonics = _INDIRECT_CALL_MNEMONICS.get(self._cs_arch_name(), frozenset())
+        if not mnemonics:
+            return []
+
+        md.detail = False
+        code = text.data()
+        base = text["sh_addr"]
+        funcs = self.defined_functions()
+        func_addrs = sorted(funcs)
+
+        out: list[IndirectCall] = []
+        for insn in md.disasm(code, base):
+            if insn.mnemonic not in mnemonics:
+                continue
+            op = insn.op_str.strip()
+            # On x86 a direct call has an immediate (0x..) operand; skip those.
+            if self._cs_arch_name() in ("x86", "x64") and op.startswith("0x"):
+                continue
+            out.append(
+                IndirectCall(
+                    address=insn.address,
+                    in_function=self._enclosing(insn.address, func_addrs, funcs),
+                    mnemonic=insn.mnemonic,
+                    operand=op,
+                )
+            )
+        return out
+
+    def architecture_note(self) -> str:
+        """A short note on how fully this architecture is supported."""
+
+        if self.arch in ("x86", "x64"):
+            return f"{self.arch}: full (direct + indirect calls)"
+        if self._cs_arch_name() in _INDIRECT_CALL_MNEMONICS:
+            return f"{self.arch}: indirect calls only (no PLT resolution yet)"
+        return f"{self.arch}: disassembly not supported"
 
     @staticmethod
     def _enclosing(
