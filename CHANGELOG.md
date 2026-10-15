@@ -7,6 +7,11 @@ Keep a Changelog, and the project uses semantic versioning.
 
 ### Added
 
+- Out-of-bounds and denial-of-service source patterns (tree-sitter): a tainted
+  array index (`arr[i]`) -> out-of-bounds, a tainted divisor (`x / i`, `x %% i`)
+  -> SIGFPE denial-of-service, and a variable-length / alloca-sized stack array
+  -> stack-exhaustion denial-of-service.
+
 - RWX detection (`Binary.has_rwx_segment`): a writable+executable segment, or
   an imported mprotect/mmap, keeps ret2shellcode on the table even under NX and
   adds an 'mprotect/mmap to RWX then shellcode' hint.

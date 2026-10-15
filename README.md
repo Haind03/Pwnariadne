@@ -69,7 +69,7 @@ pwndbg).
    `free`, `memcpy`, …) in the ELF's PLT (`.plt` and CET `.plt.sec`) and,
    optionally, in C source.
 2. **classify**: tag each hit with its likely bug class (stack overflow,
-   format string, UAF/double-free, command injection …) and a severity.
+   format string, UAF/double-free, command injection, out-of-bounds, denial-of-service …) and a severity.
 3. **gdbgen**: emit an observe-only debugger script that breaks at every finding
    and, on hit, dumps context tuned to the bug class and the chosen front end
    (pwndbg `context`/`canary`/`got`/`heap`/`vis_heap_chunks`, GEF equivalents,
@@ -272,7 +272,7 @@ pwnariadne/
 └── cli.py         # command-line entry point
 assets/            # logo (SVG)
 examples/          # deliberately-unsafe sample for testing (not an exploit)
-tests/             # pytest suite (98 tests, 1 needs angr)
+tests/             # pytest suite (102 tests, 1 needs angr)
 .github/           # CI (pytest on Python 3.10 to 3.12 + CLI smoke test)
 ```
 

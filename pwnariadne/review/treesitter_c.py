@@ -19,7 +19,33 @@ from pathlib import Path
 
 from pwnariadne.classify.finding import Finding
 from pwnariadne.review import taint_c
-from pwnariadne.review.sinks import lookup
+from pwnariadne.review.sinks import Sink, lookup
+
+# Synthetic sinks for language-level bug patterns (no libc function involved).
+_OOB_SINK = Sink(
+    name="array-index",
+    bug_class="out-of-bounds",
+    severity=70,
+    why="An array is indexed with an externally influenced value; a too-large or "
+    "negative index reads or writes outside the buffer.",
+    watch="The index range vs. the array bounds.",
+)
+_DIVZERO_SINK = Sink(
+    name="division",
+    bug_class="denial-of-service",
+    severity=45,
+    why="Dividing by an externally influenced value crashes with SIGFPE when it "
+    "is zero (and INT_MIN / -1 overflows).",
+    watch="Whether the divisor can be zero or -1.",
+)
+_VLA_SINK = Sink(
+    name="variable-length-array",
+    bug_class="denial-of-service",
+    severity=50,
+    why="A variable-length / alloca-sized stack array with an unbounded size can "
+    "exhaust or clash the stack.",
+    watch="The size source and any upper bound.",
+)
 
 # Index of the format argument for the format string family, by function name.
 # Only these are triaged for a constant (safe) format argument.
@@ -144,9 +170,75 @@ def review_file(path: Path) -> list[Finding]:
             finding = _finding_for_call(node, src, path, taint_cache)
             if finding is not None:
                 findings.append(finding)
+        elif node.type == "subscript_expression":
+            findings.extend(_oob_finding(node, src, path, taint_cache))
+        elif node.type == "binary_expression":
+            findings.extend(_divzero_finding(node, src, path, taint_cache))
+        elif node.type == "array_declarator":
+            findings.extend(_vla_finding(node, src, path))
         stack.extend(node.children)
 
     return findings
+
+
+def _tainted_for(node, src, taint_cache):
+    func = _enclosing_function_node(node)
+    if func is None:
+        return set()
+    t = taint_cache.get(id(func))
+    if t is None:
+        t = taint_c.compute_tainted(func, src)
+        taint_cache[id(func)] = t
+    return t
+
+
+def _mk(sink, node, src, path, taint="tainted"):
+    snippet = _text(node, src).replace("\n", " ").strip()
+    if len(snippet) > 120:
+        snippet = snippet[:117] + "..."
+    return Finding(
+        sink=sink,
+        address=None,
+        in_function=_enclosing_function(node, src),
+        source_file=str(path),
+        line=node.start_point[0] + 1,
+        snippet=snippet,
+        taint=taint,
+    )
+
+
+def _oob_finding(node, src, path, taint_cache):
+    index = node.child_by_field_name("index")
+    if index is None:
+        return []
+    tainted = _tainted_for(node, src, taint_cache)
+    if taint_c._expr_is_tainted(index, src, tainted):
+        return [_mk(_OOB_SINK, node, src, path)]
+    return []
+
+
+def _divzero_finding(node, src, path, taint_cache):
+    op = node.child_by_field_name("operator")
+    if op is None or _text(op, src) not in ("/", "%"):
+        return []
+    right = node.child_by_field_name("right")
+    if right is None:
+        return []
+    tainted = _tainted_for(node, src, taint_cache)
+    if taint_c._expr_is_tainted(right, src, tainted):
+        return [_mk(_DIVZERO_SINK, node, src, path)]
+    return []
+
+
+def _vla_finding(node, src, path):
+    # `char buf[n]` -> array_declarator with a "size" field that is not a literal.
+    size = node.child_by_field_name("size")
+    if size is None:
+        return []
+    if size.type in ("number_literal", "sizeof_expression"):
+        return []
+    # A runtime-sized stack array (VLA) is a stack-exhaustion risk.
+    return [_mk(_VLA_SINK, node, src, path, taint="local")]
 
 
 def _enclosing_function_node(node):
