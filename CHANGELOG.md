@@ -7,6 +7,18 @@ Keep a Changelog, and the project uses semantic versioning.
 
 ### Added
 
+- More source bug classes (tree-sitter): use-after-return (`return &local` or a
+  local array), integer-overflow in an allocation size (`malloc(a*b)`), on top
+  of the out-of-bounds / denial-of-service patterns.
+- Heap technique gates updated for modern glibc: safe-linking (2.32+ fd
+  mangling needs a heap leak) and hook removal (2.34+ pushes FSOP / House of
+  Apple / _IO_FILE and exit-handler targets).
+
+### Fixed
+
+- scanf-family false positives: `scanf("%d", ...)` and width-bounded `%15s`
+  are no longer flagged; only an unbounded `%s` / `%[` is.
+
 - Out-of-bounds and denial-of-service source patterns (tree-sitter): a tainted
   array index (`arr[i]`) -> out-of-bounds, a tainted divisor (`x / i`, `x %% i`)
   -> SIGFPE denial-of-service, and a variable-length / alloca-sized stack array

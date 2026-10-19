@@ -82,10 +82,12 @@ def analyze_heap(findings: list[Finding], signals) -> list[TechniqueHint]:
                 relevance="Overwrite a freed tcache chunk's fd with a target address; the "
                 "second malloc of that size then returns the target for an arbitrary "
                 "write (e.g. __free_hook, a GOT entry, a stack return address).",
-                gate="glibc 2.26+; 2.32+ mangles fd (needs a heap-base leak)",
+                gate="glibc 2.26+; 2.32+ safe-linking mangles fd (fd = (addr>>12) ^ ptr), "
+                "so a heap-base leak is needed; 2.34+ lost the hooks, retarget "
+                "__free_hook-style writes to _IO_FILE / exit handlers",
                 confidence="medium",
                 present=["a freed-chunk write primitive", "attacker-driven malloc"],
-                missing=["a target address", "on 2.32+ a heap leak to defeat fd mangling"],
+                missing=["a target address", "on 2.32+ a heap leak to defeat safe-linking"],
                 references=[_HEAP_REF + "attacks/first_fit.html"],
             )
         )
@@ -160,11 +162,14 @@ def _house_of_x(frees, mallocs, uaf, heap_of, signals) -> list[TechniqueHint]:
                 relevance="The binary uses stdio; corrupting an _IO_FILE structure (or "
                 "_IO_list_all) and its vtable turns the next stdio call into controlled "
                 "execution. House of Orange reaches this from an unsorted-bin overlap.",
-                gate="glibc-dependent; 2.24+ adds vtable checks (use _IO_str_jumps etc.)",
+                gate="2.24+ adds vtable checks (use _IO_str_jumps); 2.34+ removed the "
+                "malloc/free hooks, so FSOP (House of Apple 2, _IO_list_all) is the "
+                "modern path",
                 confidence="low",
                 present=["heap corruption primitive", "stdio in use"],
                 missing=["an _IO_FILE overwrite path", "the libc base (leak first)"],
-                references=["https://github.com/shellphish/how2heap"],
+                references=["https://github.com/shellphish/how2heap",
+                            "https://bbs.kanxue.com/thread-273832.htm"],
             )
         )
 

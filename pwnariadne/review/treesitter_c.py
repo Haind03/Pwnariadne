@@ -15,6 +15,7 @@ used; callers fall back to the regex scanner when it cannot.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from pwnariadne.classify.finding import Finding
@@ -46,6 +47,30 @@ _VLA_SINK = Sink(
     "exhaust or clash the stack.",
     watch="The size source and any upper bound.",
 )
+_INTOF_SINK = Sink(
+    name="alloc-size-overflow",
+    bug_class="integer-overflow",
+    severity=65,
+    why="An allocation size is computed with arithmetic (a*b, a+b, a<<n) that can "
+    "wrap, so the allocation is smaller than intended and later writes overflow it.",
+    watch="Whether the size arithmetic can overflow (use a checked/saturating size).",
+)
+_UAR_SINK = Sink(
+    name="use-after-return",
+    bug_class="use-after-return",
+    severity=70,
+    why="A pointer to a local (stack) variable is returned; the frame is gone after "
+    "the function returns, so any use is a dangling-stack access.",
+    watch="The returned pointer and where the caller dereferences it.",
+)
+
+# Format-argument index for scanf-family calls (to triage %d-only formats).
+_SCANF_FMT_INDEX = {
+    "scanf": 0, "__isoc99_scanf": 0,
+    "sscanf": 1, "__isoc99_sscanf": 1, "fscanf": 1,
+}
+# Allocation functions whose size argument can overflow.
+_ALLOC_FUNCS = {"malloc": 0, "alloca": 0, "realloc": 1, "valloc": 0, "calloc": None}
 
 # Index of the format argument for the format string family, by function name.
 # Only these are triaged for a constant (safe) format argument.
@@ -170,12 +195,15 @@ def review_file(path: Path) -> list[Finding]:
             finding = _finding_for_call(node, src, path, taint_cache)
             if finding is not None:
                 findings.append(finding)
+            findings.extend(_alloc_overflow_finding(node, src, path, taint_cache))
         elif node.type == "subscript_expression":
             findings.extend(_oob_finding(node, src, path, taint_cache))
         elif node.type == "binary_expression":
             findings.extend(_divzero_finding(node, src, path, taint_cache))
         elif node.type == "array_declarator":
             findings.extend(_vla_finding(node, src, path))
+        elif node.type == "return_statement":
+            findings.extend(_uar_finding(node, src, path))
         stack.extend(node.children)
 
     return findings
@@ -241,6 +269,85 @@ def _vla_finding(node, src, path):
     return [_mk(_VLA_SINK, node, src, path, taint="local")]
 
 
+def _alloc_overflow_finding(call, src, path, taint_cache):
+    """Flag malloc/realloc/alloca whose size is overflow-prone arithmetic."""
+
+    name = _callee_name(call, src)
+    if name not in _ALLOC_FUNCS:
+        return []
+    args = _call_arguments(call)
+    idx = _ALLOC_FUNCS[name]
+    if idx is None:  # calloc(n, size): flag either operand being non-constant arith
+        candidates = args
+    else:
+        candidates = [args[idx]] if idx < len(args) else []
+    for arg in candidates:
+        if arg.type == "binary_expression" and _text(arg.child_by_field_name("operator"), src) in ("*", "+", "<<"):
+            return [_mk(_INTOF_SINK, call, src, path, taint="local")]
+    return []
+
+
+def _uar_finding(node, src, path):
+    """Flag `return &local;` or `return local_array;` (dangling stack pointer)."""
+
+    expr = None
+    for c in node.named_children:
+        expr = c
+        break
+    if expr is None:
+        return []
+    func = _enclosing_function_node(node)
+    if func is None:
+        return []
+    locals_, arrays = _local_names(func, src)
+
+    # return &x  where x is a local
+    if expr.type == "pointer_expression":
+        op = expr.child_by_field_name("operator") or (expr.children[0] if expr.children else None)
+        if op is not None and _text(op, src) == "&":
+            base = taint_c._base_identifier(
+                expr.child_by_field_name("argument") or expr.named_children[-1], src
+            )
+            if base in locals_:
+                return [_mk(_UAR_SINK, node, src, path, taint="local")]
+    # return buf  where buf is a local array
+    if expr.type == "identifier" and _text(expr, src) in arrays:
+        return [_mk(_UAR_SINK, node, src, path, taint="local")]
+    return []
+
+
+def _local_names(func, src):
+    """Return (all local/param names, local array names) for a function."""
+
+    names = set(taint_c._collect_params(func, src))
+    arrays: set[str] = set()
+    body = func.child_by_field_name("body")
+    stack = [body] if body else []
+    while stack:
+        n = stack.pop()
+        if n.type == "declaration":
+            for d in n.named_children:
+                ident = taint_c._declarator_identifier(d, src)
+                if ident:
+                    names.add(ident)
+                if _contains_array_declarator(d):
+                    arr = taint_c._declarator_identifier(d, src)
+                    if arr:
+                        arrays.add(arr)
+        stack.extend(n.children)
+    return names, arrays
+
+
+def _contains_array_declarator(node) -> bool:
+    cur = [node]
+    while cur:
+        n = cur.pop()
+        if n.type == "array_declarator":
+            return True
+        cur.extend(n.children)
+    return False
+
+
 def _enclosing_function_node(node):
     cur = node.parent
     while cur is not None:
@@ -248,6 +355,20 @@ def _enclosing_function_node(node):
             return cur
         cur = cur.parent
     return None
+
+
+def _scanf_format_is_safe(name: str, args: list, src: bytes) -> bool:
+    """True if a scanf-family format literal has no unbounded %s / %[ conversion."""
+
+    idx = _SCANF_FMT_INDEX.get(name)
+    if idx is None or idx >= len(args):
+        return False
+    fmt = args[idx]
+    if fmt.type not in ("string_literal", "concatenated_string"):
+        return False  # non-constant format: cannot clear it
+    # Each %s / %[ conversion captures its width digits (empty = unbounded).
+    widths = re.findall(r"%\*?(\d*)[s\[]", _text(fmt, src))
+    return not any(w == "" for w in widths)
 
 
 def _finding_for_call(
@@ -262,6 +383,10 @@ def _finding_for_call(
 
     # Triage format string calls: a constant format argument is not a bug.
     if sink.bug_class == "format-string" and _format_arg_is_constant(name, _call_arguments(call)):
+        return None
+
+    # Triage scanf-family: a constant format with no unbounded %s / %[ is safe.
+    if name in _SCANF_FMT_INDEX and _scanf_format_is_safe(name, _call_arguments(call), src):
         return None
 
     # Taint note from the enclosing function, computed once and cached.
