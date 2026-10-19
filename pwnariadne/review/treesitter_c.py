@@ -206,6 +206,9 @@ def review_file(path: Path) -> list[Finding]:
             findings.extend(_uar_finding(node, src, path))
         stack.extend(node.children)
 
+    from pwnariadne.review import flow_c
+
+    findings.extend(flow_c.flow_findings(tree.root_node, src, path))
     return findings
 
 

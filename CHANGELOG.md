@@ -7,6 +7,11 @@ Keep a Changelog, and the project uses semantic versioning.
 
 ### Added
 
+- Flow-ordered source checks (`review/flow_c.py`, tree-sitter): uninitialised
+  scalar read before assignment, a malloc result dereferenced before its NULL
+  check, a check-then-open TOCTOU race, and an off-by-one `<=` loop that indexes
+  an array by the loop variable. Heuristic (order-based), so verify each.
+
 - More source bug classes (tree-sitter): use-after-return (`return &local` or a
   local array), integer-overflow in an allocation size (`malloc(a*b)`), on top
   of the out-of-bounds / denial-of-service patterns.
