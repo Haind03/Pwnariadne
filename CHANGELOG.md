@@ -7,6 +7,12 @@ Keep a Changelog, and the project uses semantic versioning.
 
 ### Added
 
+- Four more source checks (`review/flow_c.py`): integer-truncation (a wide
+  strlen/read result stored in char/short), sizeof-pointer (sizeof applied to a
+  pointer passed as a copy length), strncpy-no-nul (strncpy(dst, src,
+  sizeof(dst)) leaves no room for the terminator), and alloca-in-loop (alloca /
+  a VLA inside a loop, unbounded stack growth).
+
 - Three more source checks (`review/flow_c.py`): double-free (same pointer freed
   twice with no reassignment between), weak-randomness / CWE-338 (rand/random or
   a time/pid-seeded srand used where a CSPRNG is needed), and signed-size (a

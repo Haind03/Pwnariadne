@@ -63,6 +63,39 @@ _SIGNED_SINK = Sink(
     watch="Use an unsigned type and reject negative lengths before the call.",
 )
 
+_TRUNC_SINK = Sink(
+    name="integer-truncation", bug_class="integer-truncation", severity=50,
+    why="A wide value (size_t/ssize_t from strlen/read/...) is stored in a narrow "
+    "type (char/short); the high bits are lost, so a large or negative length is "
+    "mis-measured.",
+    watch="Use a type wide enough (size_t) to hold the value.",
+)
+_SIZEOFPTR_SINK = Sink(
+    name="sizeof-pointer", bug_class="incorrect-size", severity=60,
+    why="sizeof is applied to a pointer, so it yields the pointer width (8) instead "
+    "of the pointed-to buffer size; the copy moves the wrong number of bytes.",
+    watch="Pass the real buffer length, not sizeof(a pointer).",
+)
+_STRNCPY_SINK = Sink(
+    name="strncpy-no-nul", bug_class="missing-null-terminator", severity=55,
+    why="strncpy(dst, src, sizeof(dst)) fills the whole buffer and leaves no room "
+    "for the NUL, so later string use reads past the end.",
+    watch="Reserve a byte and set dst[n-1] = 0 after the copy.",
+)
+_ALLOCALOOP_SINK = Sink(
+    name="alloca-in-loop", bug_class="denial-of-service", severity=55,
+    why="alloca / a VLA inside a loop grows the stack every iteration and is never "
+    "freed until the function returns, so it can exhaust the stack.",
+    watch="Move the allocation out of the loop, or use the heap with free.",
+)
+
+_WIDE_RET = {"strlen", "read", "recv", "recvfrom", "snprintf", "strtol",
+             "strtoul", "strtoll", "fread", "malloc_usable_size", "wcslen"}
+_NARROW_TYPES = {"char", "short", "int8_t", "int16_t", "uint8_t", "uint16_t",
+                 "unsigned char", "unsigned short"}
+_COPY_FUNCS = {"memcpy", "memmove", "memset", "strncpy", "strncat", "read",
+               "recv", "bcopy"}
+
 # Length-argument index per sink, for the signed-size check.
 _LEN_ARG = {"memcpy": 2, "memmove": 2, "memset": 2, "strncpy": 2, "strncat": 2,
             "read": 2, "recv": 2, "recvfrom": 2, "fread": 1, "fgets": 1, "snprintf": 1}
@@ -161,6 +194,10 @@ def flow_findings(root, src: bytes, path: Path) -> list[Finding]:
             out += _doublefree(node, src, path, fname)
             out += _weakrand(node, src, path, fname)
             out += _signedsize(node, src, path, fname)
+            out += _truncation(node, src, path, fname)
+            out += _sizeof_pointer(node, src, path, fname)
+            out += _strncpy_nonul(node, src, path, fname)
+            out += _alloca_in_loop(node, src, path, fname)
     return out
 
 
@@ -434,6 +471,103 @@ def _decl_ident(node, src):
         cur = cur.child_by_field_name("declarator") or (
             cur.named_children[0] if cur.named_children else None)
     return None
+
+
+def _call_to_wide(value, src):
+    if value is not None and value.type == "call_expression":
+        return _callee(value, src) in _WIDE_RET
+    return False
+
+
+def _truncation(func, src, path, fname):
+    out = []
+    for n in _walk(func):
+        if n.type == "init_declarator":
+            # need the declaration's type; walk up
+            decl = n.parent
+            t = decl.child_by_field_name("type") if decl is not None else None
+            if t is not None and _text(t, src) in _NARROW_TYPES and _call_to_wide(
+                n.child_by_field_name("value"), src
+            ):
+                out.append(_mk(_TRUNC_SINK, n, src, path, fname))
+    return out
+
+
+def _pointer_locals(func, src):
+    names = set()
+    for n in _walk(func):
+        if n.type in ("declaration", "parameter_declaration"):
+            for d in n.named_children:
+                if _has_pointer_declarator(d):
+                    ident = _decl_ident(d, src)
+                    if ident:
+                        names.add(ident)
+    return names
+
+
+def _has_pointer_declarator(node):
+    for n in _walk(node):
+        if n.type == "pointer_declarator":
+            return True
+    return False
+
+
+def _sizeof_pointer(func, src, path, fname):
+    ptrs = _pointer_locals(func, src)
+    if not ptrs:
+        return []
+    out = []
+    for n in _walk(func):
+        if n.type != "call_expression" or _callee(n, src) not in _COPY_FUNCS:
+            continue
+        for a in _args(n):
+            if a.type == "sizeof_expression":
+                operand = a.child_by_field_name("value") or (
+                    a.named_children[-1] if a.named_children else None)
+                if operand is not None and _base_ident(operand, src) in ptrs:
+                    out.append(_mk(_SIZEOFPTR_SINK, n, src, path, fname))
+                    break
+    return out
+
+
+def _strncpy_nonul(func, src, path, fname):
+    out = []
+    for n in _walk(func):
+        if n.type != "call_expression" or _callee(n, src) not in ("strncpy", "strncat"):
+            continue
+        args = _args(n)
+        if len(args) < 3:
+            continue
+        dst = _base_ident(args[0], src)
+        size = args[2]
+        # strncpy(dst, src, sizeof(dst)) leaves no room for the NUL.
+        if size.type == "sizeof_expression":
+            operand = size.child_by_field_name("value") or (
+                size.named_children[-1] if size.named_children else None)
+            if operand is not None and _base_ident(operand, src) == dst:
+                out.append(_mk(_STRNCPY_SINK, n, src, path, fname))
+    return out
+
+
+def _in_loop(node):
+    cur = node.parent
+    while cur is not None:
+        if cur.type in ("for_statement", "while_statement", "do_statement"):
+            return True
+        cur = cur.parent
+    return False
+
+
+def _alloca_in_loop(func, src, path, fname):
+    out = []
+    for n in _walk(func):
+        if n.type == "call_expression" and _callee(n, src) == "alloca" and _in_loop(n):
+            out.append(_mk(_ALLOCALOOP_SINK, n, src, path, fname))
+        elif n.type == "array_declarator":
+            size = n.child_by_field_name("size")
+            if size is not None and size.type not in ("number_literal", "sizeof_expression") and _in_loop(n):
+                out.append(_mk(_ALLOCALOOP_SINK, n, src, path, fname))
+    return out
 
 
 def _find_le(cond, src):
