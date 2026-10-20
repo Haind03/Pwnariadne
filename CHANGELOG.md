@@ -7,6 +7,12 @@ Keep a Changelog, and the project uses semantic versioning.
 
 ### Added
 
+- Three more source checks (`review/flow_c.py`): double-free (same pointer freed
+  twice with no reassignment between), weak-randomness / CWE-338 (rand/random or
+  a time/pid-seeded srand used where a CSPRNG is needed), and signed-size (a
+  signed int passed as a length to memcpy/read/strncpy, which goes huge when
+  negative).
+
 - Flow-ordered source checks (`review/flow_c.py`, tree-sitter): uninitialised
   scalar read before assignment, a malloc result dereferenced before its NULL
   check, a check-then-open TOCTOU race, and an off-by-one `<=` loop that indexes
@@ -20,6 +26,8 @@ Keep a Changelog, and the project uses semantic versioning.
   Apple / _IO_FILE and exit-handler targets).
 
 ### Fixed
+
+- free(NULL) is no longer reported as a null-pointer dereference (it is a safe no-op).
 
 - scanf-family false positives: `scanf("%d", ...)` and width-bounded `%15s`
   are no longer flagged; only an unbounded `%s` / `%[` is.

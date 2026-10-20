@@ -44,12 +44,36 @@ _OBO_SINK = Sink(
     "with the loop variable then steps one element out of bounds.",
     watch="The loop bound vs. the array size (prefer < over <=).",
 )
+_DOUBLEFREE_SINK = Sink(
+    name="double-free", bug_class="use-after-free / double-free", severity=70,
+    why="The same pointer is freed twice with no reassignment in between, "
+    "corrupting the allocator's bin lists.",
+    watch="Set the pointer to NULL after free, or restructure the ownership.",
+)
+_WEAKRAND_SINK = Sink(
+    name="weak-prng", bug_class="weak-randomness", severity=45,
+    why="rand/random (or a time/pid-seeded srand) is predictable; it must not "
+    "generate tokens, cookies, canaries or keys.",
+    watch="Use getrandom/arc4random/urandom for security-sensitive values.",
+)
+_SIGNED_SINK = Sink(
+    name="signed-size", bug_class="signedness", severity=60,
+    why="A signed integer is passed as a size/length; a negative value becomes a "
+    "huge size_t, so the copy or read runs far past the buffer.",
+    watch="Use an unsigned type and reject negative lengths before the call.",
+)
+
+# Length-argument index per sink, for the signed-size check.
+_LEN_ARG = {"memcpy": 2, "memmove": 2, "memset": 2, "strncpy": 2, "strncat": 2,
+            "read": 2, "recv": 2, "recvfrom": 2, "fread": 1, "fgets": 1, "snprintf": 1}
+_SIGNED_TYPES = {"int", "short", "long", "char", "ssize_t", "ptrdiff_t",
+                 "int8_t", "int16_t", "int32_t", "int64_t", "signed"}
 
 _ALLOC = {"malloc", "calloc", "realloc", "valloc", "alloca", "strdup"}
 _CHECK_FUNCS = {"access", "faccessat", "stat", "lstat", "stat64", "lstat64"}
 _USE_FUNCS = {"open", "open64", "openat", "fopen", "fopen64", "creat"}
 _DEREF_FUNCS = {"strcpy", "strcat", "sprintf", "memcpy", "memmove", "memset",
-                "strlen", "puts", "fputs", "free"}
+                "strlen", "puts", "fputs"}  # free(NULL) is safe, so not here
 
 
 def _text(n, src: bytes) -> str:
@@ -134,6 +158,9 @@ def flow_findings(root, src: bytes, path: Path) -> list[Finding]:
             out += _nullderef(node, src, path, fname)
             out += _toctou(node, src, path, fname)
             out += _offbyone(node, src, path, fname)
+            out += _doublefree(node, src, path, fname)
+            out += _weakrand(node, src, path, fname)
+            out += _signedsize(node, src, path, fname)
     return out
 
 
@@ -304,6 +331,109 @@ def _offbyone(func, src, path, fname):
                     out.append(_mk(_OBO_SINK, n, src, path, fname))
                     break
     return out
+
+
+def _doublefree(func, src, path, fname):
+    body = func.child_by_field_name("body")
+    if body is None:
+        return []
+    frees: dict[str, list[int]] = {}   # ptr -> sorted free offsets
+    reassign: dict[str, list[int]] = {}  # ptr -> offsets where it is reassigned
+    for n in _walk(body):
+        if n.type == "call_expression" and _callee(n, src) == "free":
+            arg = _first_arg_ident(n, src)
+            if arg:
+                frees.setdefault(arg, []).append(n.start_byte)
+        elif n.type == "assignment_expression":
+            base = _base_ident(n.child_by_field_name("left"), src)
+            if base:
+                reassign.setdefault(base, []).append(n.start_byte)
+    out = []
+    for ptr, offs in frees.items():
+        offs.sort()
+        reas = sorted(reassign.get(ptr, []))
+        for i in range(1, len(offs)):
+            lo, hi = offs[i - 1], offs[i]
+            if not any(lo < r < hi for r in reas):
+                # second free of ptr with no reassignment since the first
+                node = _node_at(body, hi)
+                out.append(_mk(_DOUBLEFREE_SINK, node or body, src, path, fname))
+                break
+    return out
+
+
+def _node_at(body, offset):
+    for n in _walk(body):
+        if n.type == "call_expression" and n.start_byte == offset:
+            return n
+    return None
+
+
+def _weakrand(func, src, path, fname):
+    out = []
+    for n in _walk(func):
+        if n.type != "call_expression":
+            continue
+        name = _callee(n, src)
+        if name == "srand":
+            inner = {_callee(c, src) for c in _walk(n) if c.type == "call_expression"}
+            if inner & {"time", "getpid", "clock"}:
+                out.append(_mk(_WEAKRAND_SINK, n, src, path, fname))
+        elif name in ("rand", "random", "rand_r", "lrand48", "mrand48"):
+            out.append(_mk(_WEAKRAND_SINK, n, src, path, fname))
+    # one finding per function is enough
+    return out[:1]
+
+
+def _signedsize(func, src, path, fname):
+    body = func.child_by_field_name("body")
+    if body is None:
+        return []
+    signed = _signed_locals(func, src)
+    if not signed:
+        return []
+    out = []
+    for n in _walk(body):
+        if n.type != "call_expression":
+            continue
+        idx = _LEN_ARG.get(_callee(n, src))
+        if idx is None:
+            continue
+        args = _args(n)
+        if idx < len(args) and args[idx].type == "identifier" and _text(args[idx], src) in signed:
+            out.append(_mk(_SIGNED_SINK, n, src, path, fname))
+    return out
+
+
+def _signed_locals(func, src):
+    """Names of locals/params declared with a signed integer type."""
+
+    names: set[str] = set()
+    for n in _walk(func):
+        if n.type in ("declaration", "parameter_declaration"):
+            t = n.child_by_field_name("type")
+            if t is None:
+                continue
+            ttext = _text(t, src)
+            if ttext in _SIGNED_TYPES or (ttext.startswith("signed") or
+                                          (ttext in ("int", "long", "short", "char"))):
+                for d in n.named_children:
+                    ident = _decl_ident(d, src)
+                    if ident:
+                        names.add(ident)
+    return names
+
+
+def _decl_ident(node, src):
+    cur = node
+    guard = 0
+    while cur is not None and guard < 12:
+        guard += 1
+        if cur.type == "identifier":
+            return _text(cur, src)
+        cur = cur.child_by_field_name("declarator") or (
+            cur.named_children[0] if cur.named_children else None)
+    return None
 
 
 def _find_le(cond, src):
